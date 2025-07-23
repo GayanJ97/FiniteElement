@@ -20,6 +20,12 @@ class FrameAnalyzer:
         self.analyze_button = tk.Button(master, text="Analyze", command=self.analyze)
         self.analyze_button.pack(side=tk.RIGHT)
 
+        self.toolbar = tk.Frame(master)
+        self.toolbar.pack(side=tk.TOP, fill=tk.X)
+
+        self.line_button = tk.Button(self.toolbar, text="Line", command=self.open_line_dialog)
+        self.line_button.pack(side=tk.LEFT)
+
         self.start_x = None
         self.start_y = None
         self.lines = []
@@ -28,6 +34,14 @@ class FrameAnalyzer:
         self.canvas.bind("<Button-1>", self.on_click)
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
+
+        self.draw_axes()
+
+    def draw_axes(self):
+        self.canvas.create_line(50, 550, 750, 550, arrow=tk.LAST)
+        self.canvas.create_text(760, 550, text="X")
+        self.canvas.create_line(50, 550, 50, 50, arrow=tk.LAST)
+        self.canvas.create_text(50, 40, text="Z")
 
     def load_properties(self):
         filepath = filedialog.askopenfilename()
@@ -133,6 +147,42 @@ class FrameAnalyzer:
             self.canvas.create_line(x1, y1, x1, y1 - V1*scale, fill="green", tags="results")
             self.canvas.create_line(x2, y2, x2, y2 - V2*scale, fill="green", tags="results")
             self.canvas.create_line(x1, y1 - V1*scale, x2, y2 - V2*scale, fill="green", tags="results")
+
+    def open_line_dialog(self):
+        self.line_dialog = tk.Toplevel(self.master)
+        self.line_dialog.title("Create Line")
+
+        tk.Label(self.line_dialog, text="Start X:").grid(row=0, column=0)
+        self.start_x_entry = tk.Entry(self.line_dialog)
+        self.start_x_entry.grid(row=0, column=1)
+
+        tk.Label(self.line_dialog, text="Start Y:").grid(row=1, column=0)
+        self.start_y_entry = tk.Entry(self.line_dialog)
+        self.start_y_entry.grid(row=1, column=1)
+
+        tk.Label(self.line_dialog, text="End X:").grid(row=2, column=0)
+        self.end_x_entry = tk.Entry(self.line_dialog)
+        self.end_x_entry.grid(row=2, column=1)
+
+        tk.Label(self.line_dialog, text="End Y:").grid(row=3, column=0)
+        self.end_y_entry = tk.Entry(self.line_dialog)
+        self.end_y_entry.grid(row=3, column=1)
+
+        ok_button = tk.Button(self.line_dialog, text="OK", command=self.create_line_from_dialog)
+        ok_button.grid(row=4, column=0)
+
+        cancel_button = tk.Button(self.line_dialog, text="Cancel", command=self.line_dialog.destroy)
+        cancel_button.grid(row=4, column=1)
+
+    def create_line_from_dialog(self):
+        x1 = float(self.start_x_entry.get())
+        y1 = float(self.start_y_entry.get())
+        x2 = float(self.end_x_entry.get())
+        y2 = float(self.end_y_entry.get())
+
+        line = self.canvas.create_line(x1, y1, x2, y2)
+        self.lines.append(line)
+        self.line_dialog.destroy()
 
 
 if __name__ == "__main__":
