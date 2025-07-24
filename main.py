@@ -192,20 +192,24 @@ class FrameAnalyzer:
         self.material_table_entries.append((no_label, name_label))
 
     def save_material(self, modify, material_index):
-        name = self.material_dialog_entries["Material Name:"].get()
+        try:
+            name = self.material_dialog_entries["Material Name:"].get()
 
-        force_unit = self.current_units["force"]
-        length_unit = self.current_units["length"]
-        force_factor = 1 if force_unit == 'kN' else 0.001
-        length_factor = 1 if length_unit == 'm' else 0.001
+            force_unit = self.current_units["force"]
+            length_unit = self.current_units["length"]
+            force_factor = 1 if force_unit == 'kN' else 0.001
+            length_factor = 1 if length_unit == 'm' else 0.001
 
-        unit_weight = float(self.material_dialog_entries["Unit Weight:"].get()) * (force_factor / (length_factor**3))
-        E = float(self.material_dialog_entries["Young's Modulus:"].get()) * (force_factor / (length_factor**2))
-        nu = float(self.material_dialog_entries["Poisson's Ratio:"].get())
-        G = float(self.material_dialog_entries["Shear Modulus:"].get()) * (force_factor / (length_factor**2))
-        alpha = float(self.material_dialog_entries["Thermal Expansion Coefficient:"].get())
+            unit_weight = float(self.material_dialog_entries["Unit Weight:"].get()) * (force_factor / (length_factor**3))
+            E = float(self.material_dialog_entries["Young's Modulus:"].get()) * (force_factor / (length_factor**2))
+            nu = float(self.material_dialog_entries["Poisson's Ratio:"].get())
+            G = float(self.material_dialog_entries["Shear Modulus:"].get()) * (force_factor / (length_factor**2))
+            alpha = float(self.material_dialog_entries["Thermal Expansion Coefficient:"].get())
 
-        material_data = [name, unit_weight, E, nu, G, alpha]
+            material_data = [name, unit_weight, E, nu, G, alpha]
+        except ValueError:
+            messagebox.showerror("Input Error", "All material property fields must be filled.")
+            return
 
         if modify:
             self.materials_data[material_index] = material_data
