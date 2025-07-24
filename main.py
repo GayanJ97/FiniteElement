@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, Text, messagebox, ttk
 import fem
 import numpy as np
+import json
 
 class FrameAnalyzer:
     def __init__(self, master):
@@ -21,17 +22,23 @@ class FrameAnalyzer:
         self.analyze_button.pack(side=tk.RIGHT)
 
         self.toolbar = tk.Frame(master)
-        self.toolbar.pack(side=tk.TOP, fill=tk.X)
+        self.toolbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.save_button = tk.Button(self.toolbar, text="Save", command=self.save_project)
+        self.save_button.pack(side=tk.TOP)
+
+        self.open_button = tk.Button(self.toolbar, text="Open", command=self.open_project)
+        self.open_button.pack(side=tk.TOP)
 
         self.geometry_button = tk.Button(self.toolbar, text="Geometry", command=self.open_geometry_dialog)
-        self.geometry_button.pack(side=tk.LEFT)
+        self.geometry_button.pack(side=tk.TOP)
 
         # Unit selection dropdown
         self.units_var = tk.StringVar()
         self.units_var.set("kN, m, C")
         unit_options = ["kN, m, C", "kN, mm, C", "N, mm, C", "N, m, C"]
         self.unit_menu = tk.OptionMenu(self.toolbar, self.units_var, *unit_options, command=self.change_units)
-        self.unit_menu.pack(side=tk.LEFT)
+        self.unit_menu.pack(side=tk.TOP)
 
         # Data storage
         self.lines = []
@@ -78,6 +85,35 @@ class FrameAnalyzer:
             self.update_node_dialog_display()
             if hasattr(self, "material_dialog") and self.material_dialog.winfo_exists():
                 self.update_material_dialog_display()
+
+    def save_project(self):
+        project_data = {
+            "units": self.current_units,
+            "nodes": self.nodes_data,
+            "elements": self.elements_data,
+            "materials": self.materials_data,
+            "sections": self.sections_data,
+        }
+
+        filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
+        if filepath:
+            with open(filepath, 'w') as f:
+                json.dump(project_data, f, indent=4)
+
+    def open_project(self):
+        filepath = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
+        if filepath:
+            with open(filepath, 'r') as f:
+                project_data = json.load(f)
+
+            self.current_units = project_data["units"]
+            self.units_var.set(f"{self.current_units['force']}, {self.current_units['length']}, {self.current_units['temperature']}")
+            self.nodes_data = project_data["nodes"]
+            self.elements_data = project_data["elements"]
+            self.materials_data = project_data["materials"]
+            self.sections_data = project_data["sections"]
+
+            self.display_model()
 
     def update_material_dialog_display(self, material_index=None):
         force_unit = self.current_units["force"]
