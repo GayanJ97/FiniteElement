@@ -1,12 +1,13 @@
 import numpy as np
 
 class FrameElement:
-    def __init__(self, node1, node2, E, A, I):
+    def __init__(self, node1, node2, E, A, I, moment_release=""):
         self.node1 = node1
         self.node2 = node2
         self.E = E
         self.A = A
         self.I = I
+        self.moment_release = moment_release
 
 class Node:
     def __init__(self, x, y):
@@ -35,6 +36,16 @@ def get_element_stiffness_matrix(element):
     k[2, 2] = 4 * E * I / L
     k[2, 4] = -6 * E * I / L**2
     k[2, 5] = 2 * E * I / L
+
+    if "X" in element.moment_release:
+        k[2,2] = 0
+        k[2,5] = 0
+        k[5,2] = 0
+
+    if "Y" in element.moment_release:
+        k[5,5] = 0
+        k[2,5] = 0
+        k[5,2] = 0
 
     k[4, 1] = -12 * E * I / L**3
     k[4, 2] = -6 * E * I / L**2
