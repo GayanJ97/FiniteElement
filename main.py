@@ -26,9 +26,6 @@ class FrameAnalyzer:
         self.line_button = tk.Button(self.toolbar, text="Line", command=self.open_line_dialog)
         self.line_button.pack(side=tk.LEFT)
 
-        self.display_button = tk.Button(self.toolbar, text="Display", command=self.display_model)
-        self.display_button.pack(side=tk.LEFT)
-
         self.start_x = None
         self.start_y = None
         self.lines = []
@@ -176,8 +173,14 @@ class FrameAnalyzer:
         ok_button = tk.Button(button_frame, text="OK", command=self.create_lines_from_table)
         ok_button.pack(side=tk.LEFT)
 
+        display_button = tk.Button(button_frame, text="Display", command=self.display_model_from_dialog)
+        display_button.pack(side=tk.LEFT)
+
         cancel_button = tk.Button(button_frame, text="Cancel", command=self.line_dialog.destroy)
         cancel_button.pack(side=tk.LEFT)
+
+    def display_model_from_dialog(self):
+        self.create_lines_from_table(close_dialog=False)
 
     def add_table_row(self):
         row_entries = []
@@ -199,7 +202,7 @@ class FrameAnalyzer:
             for widget in row_to_remove:
                 widget.destroy()
 
-    def create_lines_from_table(self):
+    def create_lines_from_table(self, close_dialog=True):
         self.elements_data = []
         self.boundary_conditions = []
         nodes = []
@@ -238,7 +241,8 @@ class FrameAnalyzer:
             if "X" in support_end:
                 self.boundary_conditions.append(n2_index * 3 + 2)
 
-        self.line_dialog.destroy()
+        if close_dialog:
+            self.line_dialog.destroy()
         self.display_model()
 
     def display_model(self):
