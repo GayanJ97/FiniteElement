@@ -105,7 +105,16 @@ class FrameAnalyzer:
             tk.Label(self.element_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
         self.element_table_entries = []
-        self.add_element_table_row()
+        if self.elements_data:
+            for i, data in enumerate(self.elements_data):
+                self.add_element_table_row()
+                start_node_index = self.get_node_index_from_coords(data[0], data[1])
+                end_node_index = self.get_node_index_from_coords(data[2], data[3])
+                self.element_table_entries[i][1].set(f"N{start_node_index+1}")
+                self.element_table_entries[i][2].set(f"N{end_node_index+1}")
+                self.element_table_entries[i][3].insert(0, data[4])
+        else:
+            self.add_element_table_row()
 
         button_frame = tk.Frame(tab)
         button_frame.pack()
