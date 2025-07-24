@@ -71,8 +71,8 @@ class FrameAnalyzer:
     def change_units(self, selected):
         force, length, temp = selected.split(", ")
         self.current_units = {"force": force, "length": length, "temperature": temp}
-        if hasattr(self, "line_dialog") and self.line_dialog.winfo_exists():
-            self.update_line_dialog_display()
+        if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
+            self.update_node_dialog_display()
 
     # ------------------ DIALOG HANDLING ------------------
     def open_geometry_dialog(self):
@@ -95,6 +95,14 @@ class FrameAnalyzer:
         self.setup_node_tab(node_tab)
         self.setup_element_tab(element_tab)
         self.update_element_tab_dropdowns()
+
+    def update_node_dialog_display(self):
+        display_factor = 1 / self.get_length_factor()
+        for i, data in enumerate(self.nodes_data):
+            self.node_table_entries[i][1].delete(0, tk.END)
+            self.node_table_entries[i][1].insert(0, round(data[0] * display_factor, 3))
+            self.node_table_entries[i][2].delete(0, tk.END)
+            self.node_table_entries[i][2].insert(0, round(data[1] * display_factor, 3))
 
     def setup_element_tab(self, tab):
         self.element_table_frame = tk.Frame(tab)
