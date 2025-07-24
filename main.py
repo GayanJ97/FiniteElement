@@ -75,6 +75,27 @@ class FrameAnalyzer:
 
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
+            if hasattr(self, "material_dialog") and self.material_dialog.winfo_exists():
+                self.update_material_dialog_display()
+
+    def update_material_dialog_display(self, material_index=None):
+        force_unit = self.current_units["force"]
+        length_unit = self.current_units["length"]
+
+        if material_index is not None:
+            material_data = self.materials_data[material_index]
+
+            # Conversion factors
+            force_factor = 1 if force_unit == 'kN' else 1000
+            length_factor = 1 if length_unit == 'm' else 1000
+
+            # Get values and update entries
+            self.material_dialog_entries["Material Name:"].insert(0, material_data[0])
+            self.material_dialog_entries["Unit Weight:"].insert(0, round(material_data[1] * (force_factor / (length_factor**3)), 3))
+            self.material_dialog_entries["Young's Modulus:"].insert(0, round(material_data[2] * (force_factor / (length_factor**2)), 3))
+            self.material_dialog_entries["Poisson's Ratio:"].insert(0, material_data[3])
+            self.material_dialog_entries["Shear Modulus:"].insert(0, round(material_data[4] * (force_factor / (length_factor**2)), 3))
+            self.material_dialog_entries["Thermal Expansion Coefficient:"].insert(0, material_data[5])
 
 
     # ------------------ DIALOG HANDLING ------------------
@@ -110,42 +131,35 @@ class FrameAnalyzer:
 
         self.material_table_entries = []
         self.selected_material_index = None
-        # self.add_material_table_row() # To be implemented
+        if self.materials_data:
+            for material in self.materials_data:
+                self.add_material_table_row(material[0])
 
         button_frame = tk.Frame(tab)
         button_frame.pack()
 
         tk.Button(button_frame, text="Add", command=self.open_material_dialog).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Remove", command=self.remove_material).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Modify", command=self.modify_material).pack(side=tk.LEFT)
+        self.remove_material_button = tk.Button(button_frame, text="Remove", command=self.remove_material, state=tk.DISABLED)
+        self.remove_material_button.pack(side=tk.LEFT)
+        self.modify_material_button = tk.Button(button_frame, text="Modify", command=self.modify_material, state=tk.DISABLED)
+        self.modify_material_button.pack(side=tk.LEFT)
 
     def open_material_dialog(self, modify=False, material_index=None):
         self.material_dialog = tk.Toplevel(self.geometry_dialog)
         self.material_dialog.title("Material Properties")
 
-        tk.Label(self.material_dialog, text="Material Name:").grid(row=0, column=0)
-        self.material_name_entry = tk.Entry(self.material_dialog)
-        self.material_name_entry.grid(row=0, column=1)
+        self.material_dialog_entries = {}
 
-        tk.Label(self.material_dialog, text="Unit Weight:").grid(row=1, column=0)
-        self.unit_weight_entry = tk.Entry(self.material_dialog)
-        self.unit_weight_entry.grid(row=1, column=1)
+        labels = ["Material Name:", "Unit Weight:", "Young's Modulus:", "Poisson's Ratio:", "Shear Modulus:", "Thermal Expansion Coefficient:"]
+        for i, label_text in enumerate(labels):
+            label = tk.Label(self.material_dialog, text=label_text)
+            label.grid(row=i, column=0)
+            entry = tk.Entry(self.material_dialog)
+            entry.grid(row=i, column=1)
+            self.material_dialog_entries[label_text] = entry
 
-        tk.Label(self.material_dialog, text="Young's Modulus:").grid(row=2, column=0)
-        self.young_modulus_entry = tk.Entry(self.material_dialog)
-        self.young_modulus_entry.grid(row=2, column=1)
-
-        tk.Label(self.material_dialog, text="Poisson's Ratio:").grid(row=3, column=0)
-        self.poisson_ratio_entry = tk.Entry(self.material_dialog)
-        self.poisson_ratio_entry.grid(row=3, column=1)
-
-        tk.Label(self.material_dialog, text="Shear Modulus:").grid(row=4, column=0)
-        self.shear_modulus_entry = tk.Entry(self.material_dialog)
-        self.shear_modulus_entry.grid(row=4, column=1)
-
-        tk.Label(self.material_dialog, text="Thermal Expansion Coefficient:").grid(row=5, column=0)
-        self.thermal_expansion_entry = tk.Entry(self.material_dialog)
-        self.thermal_expansion_entry.grid(row=5, column=1)
+        if modify:
+            self.update_material_dialog_display(material_index)
 
         ok_button = tk.Button(self.material_dialog, text="OK", command=lambda: self.save_material(modify, material_index))
         ok_button.grid(row=6, column=0)
@@ -169,6 +183,8 @@ class FrameAnalyzer:
                 row[1].config(bg="white")
             self.material_table_entries[index][0].config(bg="lightblue")
             self.material_table_entries[index][1].config(bg="lightblue")
+            self.remove_material_button.config(state=tk.NORMAL)
+            self.modify_material_button.config(state=tk.NORMAL)
 
         no_label.bind("<Button-1>", on_click)
         name_label.bind("<Button-1>", on_click)
@@ -176,12 +192,18 @@ class FrameAnalyzer:
         self.material_table_entries.append((no_label, name_label))
 
     def save_material(self, modify, material_index):
-        name = self.material_name_entry.get()
-        unit_weight = float(self.unit_weight_entry.get())
-        E = float(self.young_modulus_entry.get())
-        nu = float(self.poisson_ratio_entry.get())
-        G = float(self.shear_modulus_entry.get())
-        alpha = float(self.thermal_expansion_entry.get())
+        name = self.material_dialog_entries["Material Name:"].get()
+
+        force_unit = self.current_units["force"]
+        length_unit = self.current_units["length"]
+        force_factor = 1 if force_unit == 'kN' else 0.001
+        length_factor = 1 if length_unit == 'm' else 0.001
+
+        unit_weight = float(self.material_dialog_entries["Unit Weight:"].get()) * (force_factor / (length_factor**3))
+        E = float(self.material_dialog_entries["Young's Modulus:"].get()) * (force_factor / (length_factor**2))
+        nu = float(self.material_dialog_entries["Poisson's Ratio:"].get())
+        G = float(self.material_dialog_entries["Shear Modulus:"].get()) * (force_factor / (length_factor**2))
+        alpha = float(self.material_dialog_entries["Thermal Expansion Coefficient:"].get())
 
         material_data = [name, unit_weight, E, nu, G, alpha]
 
