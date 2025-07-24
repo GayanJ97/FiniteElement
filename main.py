@@ -38,6 +38,7 @@ class FrameAnalyzer:
         self.elements_data = []  # [x1, y1, x2, y2, support_start, support_end]
         self.nodes_data = [] # [x, y, support]
         self.materials_data = [] # [name, unit_weight, E, nu, G, alpha]
+        self.sections_data = [] # [name, type, properties, material_index]
         self.properties = {}
         self.current_units = {"force": "kN", "length": "m", "temperature": "C"}
 
@@ -118,16 +119,188 @@ class FrameAnalyzer:
 
         self.setup_node_tab(node_tab)
         self.setup_material_tab(material_tab)
+        self.setup_section_tab(section_tab)
         self.setup_element_tab(element_tab)
         self.update_element_tab_dropdowns()
 
+    def setup_section_tab(self, tab):
+        self.section_table_frame = tk.Frame(tab)
+        self.section_table_frame.pack()
+
+        headers = ["No.", "Section Name", "Material"]
+        for i, header in enumerate(headers):
+            tk.Label(self.section_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.section_table_entries = []
+        self.selected_section_index = None
+        if self.sections_data:
+            for section in self.sections_data:
+                self.add_section_table_row(section[0])
+                if section[3] is not None:
+                    self.section_table_entries[-1][2].set(self.materials_data[section[3]][0])
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.open_section_type_dialog).pack(side=tk.LEFT)
+        self.remove_section_button = tk.Button(button_frame, text="Remove", command=self.remove_section, state=tk.DISABLED)
+        self.remove_section_button.pack(side=tk.LEFT)
+        self.modify_section_button = tk.Button(button_frame, text="Modify", command=self.modify_section, state=tk.DISABLED)
+        self.modify_section_button.pack(side=tk.LEFT)
+
+    def open_section_type_dialog(self):
+        self.section_type_dialog = tk.Toplevel(self.geometry_dialog)
+        self.section_type_dialog.title("Select Section Type")
+
+        tk.Button(self.section_type_dialog, text="I / Wide Flange", command=self.open_i_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Channel", command=self.open_channel_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Tee", command=self.open_tee_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Angle", command=self.open_angle_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Double Angle", command=self.open_double_angle_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Double Channel", command=self.open_double_channel_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Pipe", command=self.open_pipe_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Tube", command=self.open_tube_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Rectangular", command=self.open_rectangular_section_dialog).pack()
+        tk.Button(self.section_type_dialog, text="Circular", command=self.open_circular_section_dialog).pack()
+
+    def open_i_section_dialog(self):
+        self.open_section_properties_dialog("I / Wide Flange", ["Outside height (h)", "Top flange width (b₁)", "Top flange thickness (t₁)", "Web thickness (tw)", "Bottom flange width (b₂)", "Bottom flange thickness (t₂)", "Fillet radius (r)"])
+
+    def open_channel_section_dialog(self):
+        self.open_section_properties_dialog("Channel", ["Height (h)", "Flange width (b)", "Flange thickness (tf)", "Web thickness (tw)", "Root radius (r)"])
+
+    def open_tee_section_dialog(self):
+        self.open_section_properties_dialog("Tee", ["Flange width (b)", "Flange thickness (tf)", "Stem depth (d)", "Stem thickness (tw)", "Root radius (r)"])
+
+    def open_angle_section_dialog(self):
+        self.open_section_properties_dialog("Angle", ["Leg 1 width (b)", "Leg 2 width (d)", "Leg thickness (t)", "Root radius (r)"])
+
+    def open_double_angle_section_dialog(self):
+        self.open_section_properties_dialog("Double Angle", ["Leg 1 width (b)", "Leg 2 width (d)", "Leg thickness (t)", "Root radius (r)", "Spacing"])
+
+    def open_double_channel_section_dialog(self):
+        self.open_section_properties_dialog("Double Channel", ["Height (h)", "Flange width (b)", "Flange thickness (tf)", "Web thickness (tw)", "Root radius (r)", "Spacing"])
+
+    def open_pipe_section_dialog(self):
+        self.open_section_properties_dialog("Pipe", ["Outer diameter (OD)", "Thickness (t)"])
+
+    def open_tube_section_dialog(self):
+        self.open_section_properties_dialog("Tube", ["Width (b)", "Height (h)", "Thickness (t)", "Corner radius (r)"])
+
+    def open_rectangular_section_dialog(self):
+        self.open_section_properties_dialog("Rectangular", ["Width (b)", "Height (h)"])
+
+    def open_circular_section_dialog(self):
+        self.open_section_properties_dialog("Circular", ["Diameter (d)"])
+
+    def open_section_properties_dialog(self, section_type, labels):
+        self.section_properties_dialog = tk.Toplevel(self.geometry_dialog)
+        self.section_properties_dialog.title(f"{section_type} Properties")
+
+        self.section_properties_entries = {}
+
+        for i, label_text in enumerate(labels):
+            label = tk.Label(self.section_properties_dialog, text=label_text)
+            label.grid(row=i, column=0)
+            entry = tk.Entry(self.section_properties_dialog)
+            entry.grid(row=i, column=1)
+            self.section_properties_entries[label_text] = entry
+
+        ok_button = tk.Button(self.section_properties_dialog, text="OK", command=lambda: self.save_section(section_type))
+        ok_button.grid(row=len(labels), column=0)
+
+        cancel_button = tk.Button(self.section_properties_dialog, text="Cancel", command=self.section_properties_dialog.destroy)
+        cancel_button.grid(row=len(labels), column=1)
+
+    def add_section_table_row(self, name):
+        row_num = len(self.section_table_entries) + 1
+
+        no_label = tk.Label(self.section_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
+        no_label.grid(row=row_num, column=0)
+
+        name_entry = tk.Entry(self.section_table_frame, width=15)
+        name_entry.grid(row=row_num, column=1)
+        name_entry.insert(0, name)
+
+        material_names = [m[0] for m in self.materials_data]
+        if not material_names:
+            material_names = [""]
+        material_var = tk.StringVar()
+        material_menu = tk.OptionMenu(self.section_table_frame, material_var, *material_names)
+        material_menu.grid(row=row_num, column=2)
+
+        def on_click(event, index=row_num-1):
+            self.selected_section_index = index
+            for row in self.section_table_entries:
+                row[0].config(bg="white")
+                row[1].config(bg="white")
+            self.section_table_entries[index][0].config(bg="lightblue")
+            self.section_table_entries[index][1].config(bg="lightblue")
+            self.remove_section_button.config(state=tk.NORMAL)
+            self.modify_section_button.config(state=tk.NORMAL)
+
+        no_label.bind("<Button-1>", on_click)
+        name_entry.bind("<Button-1>", on_click)
+
+        self.section_table_entries.append((no_label, name_entry, material_var))
+
+    def save_section(self, section_type, modify=False, section_index=None):
+        properties = {}
+        for label, entry in self.section_properties_entries.items():
+            properties[label] = float(entry.get())
+
+        if modify:
+            section_name = self.sections_data[section_index][0]
+            material_index = self.sections_data[section_index][3]
+            self.sections_data[section_index] = [section_name, section_type, properties, material_index]
+        else:
+            section_name = f"{section_type}-{len(self.sections_data)+1}"
+            self.sections_data.append([section_name, section_type, properties, None])
+            self.add_section_table_row(section_name)
+
+        self.section_properties_dialog.destroy()
+        if not modify:
+            self.section_type_dialog.destroy()
+
+    def remove_section(self):
+        if self.selected_section_index is not None:
+            self.sections_data.pop(self.selected_section_index)
+            for widget in self.section_table_entries[self.selected_section_index]:
+                if isinstance(widget, tk.StringVar):
+                    continue
+                widget.destroy()
+            self.section_table_entries.pop(self.selected_section_index)
+            # Re-number the remaining sections
+            for i, row in enumerate(self.section_table_entries):
+                row[0].config(text=str(i+1))
+            self.selected_section_index = None
+
+    def modify_section(self):
+        if self.selected_section_index is not None:
+            section_data = self.sections_data[self.selected_section_index]
+            section_type = section_data[1]
+            if section_type == "I / Wide Flange":
+                self.open_i_section_dialog()
+            elif section_type == "Channel":
+                self.open_channel_section_dialog()
+            # ... and so on for the other section types
+
+            # Now populate the dialog with the existing data
+            self.section_properties_dialog.title(f"Modify {section_type} Properties")
+            for label, entry in self.section_properties_entries.items():
+                entry.insert(0, section_data[2][label])
+
+            # Change the OK button to call save_section with modify=True
+            ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
+            ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
+
     def setup_material_tab(self, tab):
-        table_frame = tk.Frame(tab)
-        table_frame.pack()
+        self.material_table_frame = tk.Frame(tab)
+        self.material_table_frame.pack()
 
         headers = ["No.", "Material"]
         for i, header in enumerate(headers):
-            tk.Label(table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+            tk.Label(self.material_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
         self.material_table_entries = []
         self.selected_material_index = None
@@ -220,6 +393,19 @@ class FrameAnalyzer:
             self.add_material_table_row(name)
 
         self.material_dialog.destroy()
+        self.update_section_tab_material_dropdown()
+
+    def update_section_tab_material_dropdown(self):
+        material_names = [m[0] for m in self.materials_data]
+        if not material_names:
+            material_names = [""]
+
+        for row in self.section_table_entries:
+            material_var = row[2]
+            material_menu = self.section_table_frame.grid_slaves(row=self.section_table_entries.index(row)+1, column=2)[0]
+            material_menu['menu'].delete(0, 'end')
+            for name in material_names:
+                material_menu['menu'].add_command(label=name, command=tk._setit(material_var, name))
 
     def remove_material(self):
         if self.selected_material_index is not None:
@@ -438,10 +624,26 @@ class FrameAnalyzer:
 
                 self.nodes_data.append([x, y, support])  # Internal always in meters
 
+            self.save_sections_from_table()
+
             if close_dialog:
                 self.geometry_dialog.destroy()
         except ValueError:
             messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
+
+    def save_sections_from_table(self):
+        for i, row in enumerate(self.section_table_entries):
+            section_name = row[1].get()
+            material_name = row[2].get()
+            material_index = self.get_material_index_from_name(material_name)
+            self.sections_data[i][0] = section_name
+            self.sections_data[i][3] = material_index
+
+    def get_material_index_from_name(self, name):
+        for i, material_data in enumerate(self.materials_data):
+            if material_data[0] == name:
+                return i
+        return None
 
     def display_nodes_from_table(self):
         self.save_nodes_from_table(close_dialog=False)
