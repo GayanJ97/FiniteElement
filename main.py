@@ -277,6 +277,7 @@ class FrameAnalyzer:
 
         no_label.bind("<Button-1>", on_click)
         name_entry.bind("<Button-1>", on_click)
+        name_entry.bind("<FocusOut>", lambda event, index=row_num-1: self.save_section_name(event, index))
 
         self.section_table_entries.append((no_label, name_entry, material_var))
 
