@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, Text
+from tkinter import filedialog, Text, messagebox
 import fem
 import numpy as np
 
@@ -206,44 +206,48 @@ class FrameAnalyzer:
         cancel_button.pack(side=tk.LEFT)
 
     def display_model_from_dialog(self):
-        self.elements_data = []
-        self.boundary_conditions = []
-        nodes = []
-        for row in self.table_entries:
-            x1 = float(row[1].get())
-            y1 = float(row[2].get())
-            x2 = float(row[3].get())
-            y2 = float(row[4].get())
-            support_start = row[5].get()
-            support_end = row[6].get()
+        try:
+            self.elements_data = []
+            self.boundary_conditions = []
+            nodes = []
+            for row in self.table_entries:
+                x1 = float(row[1].get())
+                y1 = float(row[2].get())
+                x2 = float(row[3].get())
+                y2 = float(row[4].get())
+                support_start = row[5].get()
+                support_end = row[6].get()
 
-            self.elements_data.append([x1, y1, x2, y2])
+                self.elements_data.append([x1, y1, x2, y2])
 
-            node1 = fem.Node(x1, y1)
-            node2 = fem.Node(x2, y2)
+                node1 = fem.Node(x1, y1)
+                node2 = fem.Node(x2, y2)
 
-            if node1 not in nodes:
-                nodes.append(node1)
-            if node2 not in nodes:
-                nodes.append(node2)
+                if node1 not in nodes:
+                    nodes.append(node1)
+                if node2 not in nodes:
+                    nodes.append(node2)
 
-            n1_index = nodes.index(node1)
-            n2_index = nodes.index(node2)
+                n1_index = nodes.index(node1)
+                n2_index = nodes.index(node2)
 
-            if "x" in support_start:
-                self.boundary_conditions.append(n1_index * 3)
-            if "y" in support_start:
-                self.boundary_conditions.append(n1_index * 3 + 1)
-            if "X" in support_start:
-                self.boundary_conditions.append(n1_index * 3 + 2)
+                if "x" in support_start:
+                    self.boundary_conditions.append(n1_index * 3)
+                if "y" in support_start:
+                    self.boundary_conditions.append(n1_index * 3 + 1)
+                if "X" in support_start:
+                    self.boundary_conditions.append(n1_index * 3 + 2)
 
-            if "x" in support_end:
-                self.boundary_conditions.append(n2_index * 3)
-            if "y" in support_end:
-                self.boundary_conditions.append(n2_index * 3 + 1)
-            if "X" in support_end:
-                self.boundary_conditions.append(n2_index * 3 + 2)
-        self.display_model()
+                if "x" in support_end:
+                    self.boundary_conditions.append(n2_index * 3)
+                if "y" in support_end:
+                    self.boundary_conditions.append(n2_index * 3 + 1)
+                if "X" in support_end:
+                    self.boundary_conditions.append(n2_index * 3 + 2)
+            self.display_model()
+        except ValueError:
+            messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
+            return
 
     def add_table_row(self):
         row_entries = []
