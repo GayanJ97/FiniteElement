@@ -26,6 +26,9 @@ class FrameAnalyzer:
         self.line_button = tk.Button(self.toolbar, text="Line", command=self.open_line_dialog)
         self.line_button.pack(side=tk.LEFT)
 
+        self.display_button = tk.Button(self.toolbar, text="Display", command=self.display_model)
+        self.display_button.pack(side=tk.LEFT)
+
         self.start_x = None
         self.start_y = None
         self.lines = []
@@ -97,9 +100,7 @@ class FrameAnalyzer:
         F = np.zeros(num_nodes * 3)
         F[5] = -100 # Hardcoded load for now
 
-        boundary_conditions = [0, 1, 2] # Hardcoded boundary conditions
-
-        U = fem.solve(K, F, boundary_conditions)
+        U = fem.solve(K, F, self.boundary_conditions)
         self.draw_deformed_shape(U, nodes, elements)
         self.draw_moment_diagram(U, nodes, elements)
         self.draw_shear_diagram(U, nodes, elements)
@@ -150,39 +151,121 @@ class FrameAnalyzer:
 
     def open_line_dialog(self):
         self.line_dialog = tk.Toplevel(self.master)
-        self.line_dialog.title("Create Line")
+        self.line_dialog.title("Line Input")
 
-        tk.Label(self.line_dialog, text="Start X:").grid(row=0, column=0)
-        self.start_x_entry = tk.Entry(self.line_dialog)
-        self.start_x_entry.grid(row=0, column=1)
+        self.table_frame = tk.Frame(self.line_dialog)
+        self.table_frame.pack()
 
-        tk.Label(self.line_dialog, text="Start Y:").grid(row=1, column=0)
-        self.start_y_entry = tk.Entry(self.line_dialog)
-        self.start_y_entry.grid(row=1, column=1)
+        headers = ["Element no.", "Start x", "Start y", "End x", "End y", "Support Start", "Support End"]
+        for i, header in enumerate(headers):
+            tk.Label(self.table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
-        tk.Label(self.line_dialog, text="End X:").grid(row=2, column=0)
-        self.end_x_entry = tk.Entry(self.line_dialog)
-        self.end_x_entry.grid(row=2, column=1)
+        self.table_entries = []
+        self.add_table_row()
 
-        tk.Label(self.line_dialog, text="End Y:").grid(row=3, column=0)
-        self.end_y_entry = tk.Entry(self.line_dialog)
-        self.end_y_entry.grid(row=3, column=1)
+        button_frame = tk.Frame(self.line_dialog)
+        button_frame.pack()
 
-        ok_button = tk.Button(self.line_dialog, text="OK", command=self.create_line_from_dialog)
-        ok_button.grid(row=4, column=0)
+        add_button = tk.Button(button_frame, text="Add", command=self.add_table_row)
+        add_button.pack(side=tk.LEFT)
 
-        cancel_button = tk.Button(self.line_dialog, text="Cancel", command=self.line_dialog.destroy)
-        cancel_button.grid(row=4, column=1)
+        remove_button = tk.Button(button_frame, text="Remove", command=self.remove_table_row)
+        remove_button.pack(side=tk.LEFT)
 
-    def create_line_from_dialog(self):
-        x1 = float(self.start_x_entry.get())
-        y1 = float(self.start_y_entry.get())
-        x2 = float(self.end_x_entry.get())
-        y2 = float(self.end_y_entry.get())
+        ok_button = tk.Button(button_frame, text="OK", command=self.create_lines_from_table)
+        ok_button.pack(side=tk.LEFT)
 
-        line = self.canvas.create_line(x1, y1, x2, y2)
-        self.lines.append(line)
+        cancel_button = tk.Button(button_frame, text="Cancel", command=self.line_dialog.destroy)
+        cancel_button.pack(side=tk.LEFT)
+
+    def add_table_row(self):
+        row_entries = []
+        row_num = len(self.table_entries) + 1
+
+        element_no_label = tk.Label(self.table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
+        element_no_label.grid(row=row_num, column=0)
+        row_entries.append(element_no_label)
+
+        for i in range(1, 7):
+            entry = tk.Entry(self.table_frame, width=15)
+            entry.grid(row=row_num, column=i)
+            row_entries.append(entry)
+        self.table_entries.append(row_entries)
+
+    def remove_table_row(self):
+        if len(self.table_entries) > 1:
+            row_to_remove = self.table_entries.pop()
+            for widget in row_to_remove:
+                widget.destroy()
+
+    def create_lines_from_table(self):
+        self.lines = []
+        self.boundary_conditions = []
+        nodes = []
+        for row in self.table_entries:
+            x1 = float(row[1].get())
+            y1 = float(row[2].get())
+            x2 = float(row[3].get())
+            y2 = float(row[4].get())
+            support_start = row[5].get()
+            support_end = row[6].get()
+
+            node1 = fem.Node(x1, y1)
+            node2 = fem.Node(x2, y2)
+
+            if node1 not in nodes:
+                nodes.append(node1)
+            if node2 not in nodes:
+                nodes.append(node2)
+
+            n1_index = nodes.index(node1)
+            n2_index = nodes.index(node2)
+
+            if "x" in support_start:
+                self.boundary_conditions.append(n1_index * 3)
+            if "y" in support_start:
+                self.boundary_conditions.append(n1_index * 3 + 1)
+            if "X" in support_start:
+                self.boundary_conditions.append(n1_index * 3 + 2)
+
+            if "x" in support_end:
+                self.boundary_conditions.append(n2_index * 3)
+            if "y" in support_end:
+                self.boundary_conditions.append(n2_index * 3 + 1)
+            if "X" in support_end:
+                self.boundary_conditions.append(n2_index * 3 + 2)
+
+            line = self.canvas.create_line(x1, y1, x2, y2)
+            self.lines.append(line)
         self.line_dialog.destroy()
+
+    def display_model(self):
+        self.canvas.delete("all")
+        self.draw_axes()
+        for line in self.lines:
+            coords = self.canvas.coords(line)
+            self.canvas.create_line(coords)
+
+        nodes = []
+        for line in self.lines:
+            coords = self.canvas.coords(line)
+            node1 = fem.Node(coords[0], coords[1])
+            node2 = fem.Node(coords[2], coords[3])
+            if node1 not in nodes:
+                nodes.append(node1)
+            if node2 not in nodes:
+                nodes.append(node2)
+
+        for i, bc in enumerate(self.boundary_conditions):
+            node_index = bc // 3
+            dof = bc % 3
+            node = nodes[node_index]
+            if dof == 0: # x restrained
+                self.canvas.create_line(node.x, node.y-5, node.x, node.y+5, fill="red")
+            elif dof == 1: # y restrained
+                self.canvas.create_line(node.x-5, node.y, node.x+5, node.y, fill="red")
+            elif dof == 2: # moment restrained
+                self.canvas.create_oval(node.x-5, node.y-5, node.x+5, node.y+5, outline="red")
 
 
 if __name__ == "__main__":
