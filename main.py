@@ -218,8 +218,9 @@ class FrameAnalyzer:
         no_label = tk.Label(self.section_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
         no_label.grid(row=row_num, column=0)
 
-        name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
-        name_label.grid(row=row_num, column=1)
+        name_entry = tk.Entry(self.section_table_frame, width=15)
+        name_entry.grid(row=row_num, column=1)
+        name_entry.insert(0, name)
 
         material_names = [m[0] for m in self.materials_data]
         if not material_names:
@@ -239,20 +240,27 @@ class FrameAnalyzer:
             self.modify_section_button.config(state=tk.NORMAL)
 
         no_label.bind("<Button-1>", on_click)
-        name_label.bind("<Button-1>", on_click)
+        name_entry.bind("<Button-1>", on_click)
 
-        self.section_table_entries.append((no_label, name_label, material_var))
+        self.section_table_entries.append((no_label, name_entry, material_var))
 
-    def save_section(self, section_type):
+    def save_section(self, section_type, modify=False, section_index=None):
         properties = {}
         for label, entry in self.section_properties_entries.items():
             properties[label] = float(entry.get())
 
-        section_name = f"{section_type}-{len(self.sections_data)+1}"
-        self.sections_data.append([section_name, section_type, properties, None])
-        self.add_section_table_row(section_name)
+        if modify:
+            section_name = self.sections_data[section_index][0]
+            material_index = self.sections_data[section_index][3]
+            self.sections_data[section_index] = [section_name, section_type, properties, material_index]
+        else:
+            section_name = f"{section_type}-{len(self.sections_data)+1}"
+            self.sections_data.append([section_name, section_type, properties, None])
+            self.add_section_table_row(section_name)
+
         self.section_properties_dialog.destroy()
-        self.section_type_dialog.destroy()
+        if not modify:
+            self.section_type_dialog.destroy()
 
     def remove_section(self):
         if self.selected_section_index is not None:
@@ -282,19 +290,9 @@ class FrameAnalyzer:
             for label, entry in self.section_properties_entries.items():
                 entry.insert(0, section_data[2][label])
 
-            # Change the OK button to call an update method
+            # Change the OK button to call save_section with modify=True
             ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
-            ok_button.config(command=lambda: self.update_section(self.selected_section_index, section_type))
-
-    def update_section(self, index, section_type):
-        properties = {}
-        for label, entry in self.section_properties_entries.items():
-            properties[label] = float(entry.get())
-
-        section_name = self.sections_data[index][0]
-        material_index = self.sections_data[index][3]
-        self.sections_data[index] = [section_name, section_type, properties, material_index]
-        self.section_properties_dialog.destroy()
+            ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
 
     def setup_material_tab(self, tab):
         self.material_table_frame = tk.Frame(tab)
@@ -395,6 +393,19 @@ class FrameAnalyzer:
             self.add_material_table_row(name)
 
         self.material_dialog.destroy()
+        self.update_section_tab_material_dropdown()
+
+    def update_section_tab_material_dropdown(self):
+        material_names = [m[0] for m in self.materials_data]
+        if not material_names:
+            material_names = [""]
+
+        for row in self.section_table_entries:
+            material_var = row[2]
+            material_menu = self.section_table_frame.grid_slaves(row=self.section_table_entries.index(row)+1, column=2)[0]
+            material_menu['menu'].delete(0, 'end')
+            for name in material_names:
+                material_menu['menu'].add_command(label=name, command=tk._setit(material_var, name))
 
     def remove_material(self):
         if self.selected_material_index is not None:
@@ -613,10 +624,26 @@ class FrameAnalyzer:
 
                 self.nodes_data.append([x, y, support])  # Internal always in meters
 
+            self.save_sections_from_table()
+
             if close_dialog:
                 self.geometry_dialog.destroy()
         except ValueError:
             messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
+
+    def save_sections_from_table(self):
+        for i, row in enumerate(self.section_table_entries):
+            section_name = row[1].get()
+            material_name = row[2].get()
+            material_index = self.get_material_index_from_name(material_name)
+            self.sections_data[i][0] = section_name
+            self.sections_data[i][3] = material_index
+
+    def get_material_index_from_name(self, name):
+        for i, material_data in enumerate(self.materials_data):
+            if material_data[0] == name:
+                return i
+        return None
 
     def display_nodes_from_table(self):
         self.save_nodes_from_table(close_dialog=False)
