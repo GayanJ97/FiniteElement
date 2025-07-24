@@ -124,12 +124,12 @@ class FrameAnalyzer:
         self.update_element_tab_dropdowns()
 
     def setup_section_tab(self, tab):
-        table_frame = tk.Frame(tab)
-        table_frame.pack()
+        self.section_table_frame = tk.Frame(tab)
+        self.section_table_frame.pack()
 
         headers = ["No.", "Section Name", "Material"]
         for i, header in enumerate(headers):
-            tk.Label(table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+            tk.Label(self.section_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
         self.section_table_entries = []
         self.selected_section_index = None
