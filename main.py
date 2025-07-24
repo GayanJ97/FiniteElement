@@ -235,11 +235,16 @@ class FrameAnalyzer:
 
         self.section_properties_entries = {}
 
+        tk.Label(self.section_properties_dialog, text="Section Name:").grid(row=0, column=0)
+        name_entry = tk.Entry(self.section_properties_dialog)
+        name_entry.grid(row=0, column=1)
+        self.section_properties_entries["Section Name:"] = name_entry
+
         for i, label_text in enumerate(labels):
             label = tk.Label(self.section_properties_dialog, text=label_text)
-            label.grid(row=i, column=0)
+            label.grid(row=i+1, column=0)
             entry = tk.Entry(self.section_properties_dialog)
-            entry.grid(row=i, column=1)
+            entry.grid(row=i+1, column=1)
             self.section_properties_entries[label_text] = entry
 
         ok_button = tk.Button(self.section_properties_dialog, text="OK", command=lambda: self.save_section(section_type))
@@ -254,9 +259,8 @@ class FrameAnalyzer:
         no_label = tk.Label(self.section_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
         no_label.grid(row=row_num, column=0)
 
-        name_entry = tk.Entry(self.section_table_frame, width=15)
-        name_entry.grid(row=row_num, column=1)
-        name_entry.insert(0, name)
+        name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
+        name_label.grid(row=row_num, column=1)
 
         material_names = [m[0] for m in self.materials_data]
         if not material_names:
@@ -276,22 +280,22 @@ class FrameAnalyzer:
             self.modify_section_button.config(state=tk.NORMAL)
 
         no_label.bind("<Button-1>", on_click)
-        name_entry.bind("<Button-1>", on_click)
-        name_entry.bind("<FocusOut>", lambda event, index=row_num-1: self.save_section_name(event, index))
+        name_label.bind("<Button-1>", on_click)
 
-        self.section_table_entries.append((no_label, name_entry, material_var))
+        self.section_table_entries.append((no_label, name_label, material_var))
 
     def save_section(self, section_type, modify=False, section_index=None):
         properties = {}
+        section_name = self.section_properties_entries["Section Name:"].get()
         for label, entry in self.section_properties_entries.items():
-            properties[label] = float(entry.get())
+            if label != "Section Name:":
+                properties[label] = float(entry.get())
 
         if modify:
-            section_name = self.sections_data[section_index][0]
             material_index = self.sections_data[section_index][3]
             self.sections_data[section_index] = [section_name, section_type, properties, material_index]
+            self.section_table_entries[section_index][1].config(text=section_name)
         else:
-            section_name = f"{section_type}-{len(self.sections_data)+1}"
             self.sections_data.append([section_name, section_type, properties, None])
             self.add_section_table_row(section_name)
 
@@ -324,8 +328,10 @@ class FrameAnalyzer:
 
             # Now populate the dialog with the existing data
             self.section_properties_dialog.title(f"Modify {section_type} Properties")
+            self.section_properties_entries["Section Name:"].insert(0, section_data[0])
             for label, entry in self.section_properties_entries.items():
-                entry.insert(0, section_data[2][label])
+                if label != "Section Name:":
+                    entry.insert(0, section_data[2][label])
 
             # Change the OK button to call save_section with modify=True
             ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
