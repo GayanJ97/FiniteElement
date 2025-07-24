@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, Text
+from tkinter import filedialog, Text, messagebox, ttk
 import fem
 import numpy as np
 
@@ -20,14 +20,33 @@ class FrameAnalyzer:
         self.analyze_button = tk.Button(master, text="Analyze", command=self.analyze)
         self.analyze_button.pack(side=tk.RIGHT)
 
-        self.start_x = None
-        self.start_y = None
-        self.lines = []
-        self.properties = {}
+        self.toolbar = tk.Frame(master)
+        self.toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        self.canvas.bind("<Button-1>", self.on_click)
-        self.canvas.bind("<B1-Motion>", self.on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        self.geometry_button = tk.Button(self.toolbar, text="Geometry", command=self.open_geometry_dialog)
+        self.geometry_button.pack(side=tk.LEFT)
+
+        # Unit selection dropdown
+        self.units_var = tk.StringVar()
+        self.units_var.set("kN, m, C")
+        unit_options = ["kN, m, C", "kN, mm, C", "N, mm, C", "N, m, C"]
+        self.unit_menu = tk.OptionMenu(self.toolbar, self.units_var, *unit_options, command=self.change_units)
+        self.unit_menu.pack(side=tk.LEFT)
+
+        # Data storage
+        self.lines = []
+        self.elements_data = []  # [x1, y1, x2, y2, support_start, support_end]
+        self.nodes_data = [] # [x, y, support]
+        self.properties = {}
+        self.current_units = {"force": "kN", "length": "m", "temperature": "C"}
+
+        self.draw_axes()
+
+    def draw_axes(self):
+        self.canvas.create_line(50, 550, 750, 550, arrow=tk.LAST)
+        self.canvas.create_text(760, 550, text="X")
+        self.canvas.create_line(50, 550, 50, 50, arrow=tk.LAST)
+        self.canvas.create_text(50, 40, text="Y")
 
     def load_properties(self):
         filepath = filedialog.askopenfilename()
@@ -43,97 +62,340 @@ class FrameAnalyzer:
             key, value = line.split(':')
             self.properties[key.strip()] = float(value.strip())
 
-    def on_click(self, event):
-        self.start_x = event.x
-        self.start_y = event.y
+    def get_length_factor(self):
+        return 0.001 if self.current_units["length"] == "mm" else 1.0
 
-    def on_drag(self, event):
-        if self.start_x and self.start_y:
-            self.canvas.delete("temp_line")
-            self.canvas.create_line(self.start_x, self.start_y, event.x, event.y, tags="temp_line")
+    def get_force_factor(self):
+        return 1.0 if self.current_units["force"] == "kN" else 0.001  # Convert N to kN if needed
 
-    def on_release(self, event):
-        if self.start_x and self.start_y:
-            self.canvas.delete("temp_line")
-            line = self.canvas.create_line(self.start_x, self.start_y, event.x, event.y)
+    def change_units(self, selected):
+        force, length, temp = selected.split(", ")
+        self.current_units = {"force": force, "length": length, "temperature": temp}
+        if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
+            self.update_node_dialog_display()
+
+    # ------------------ DIALOG HANDLING ------------------
+    def open_geometry_dialog(self):
+        self.geometry_dialog = tk.Toplevel(self.master)
+        self.geometry_dialog.title("Geometry Input")
+
+        notebook = ttk.Notebook(self.geometry_dialog)
+        notebook.pack(expand=True, fill="both")
+
+        node_tab = tk.Frame(notebook)
+        material_tab = tk.Frame(notebook)
+        section_tab = tk.Frame(notebook)
+        element_tab = tk.Frame(notebook)
+
+        notebook.add(node_tab, text="Node")
+        notebook.add(material_tab, text="Material")
+        notebook.add(section_tab, text="Section")
+        notebook.add(element_tab, text="Element")
+
+        self.setup_node_tab(node_tab)
+        self.setup_element_tab(element_tab)
+        self.update_element_tab_dropdowns()
+
+    def update_node_dialog_display(self):
+        display_factor = 1 / self.get_length_factor()
+        for i, data in enumerate(self.nodes_data):
+            self.node_table_entries[i][1].delete(0, tk.END)
+            self.node_table_entries[i][1].insert(0, round(data[0] * display_factor, 3))
+            self.node_table_entries[i][2].delete(0, tk.END)
+            self.node_table_entries[i][2].insert(0, round(data[1] * display_factor, 3))
+
+    def setup_element_tab(self, tab):
+        self.element_table_frame = tk.Frame(tab)
+        self.element_table_frame.pack()
+
+        headers = ["Element", "Start", "End", "Moment Release Start", "Moment Release End"]
+        for i, header in enumerate(headers):
+            tk.Label(self.element_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.element_table_entries = []
+        if self.elements_data:
+            for i, data in enumerate(self.elements_data):
+                self.add_element_table_row()
+                start_node_index = self.get_node_index_from_coords(data[0], data[1])
+                end_node_index = self.get_node_index_from_coords(data[2], data[3])
+                self.element_table_entries[i][1].set(f"N{start_node_index+1}")
+                self.element_table_entries[i][2].set(f"N{end_node_index+1}")
+                self.element_table_entries[i][3].insert(0, data[4])
+                self.element_table_entries[i][4].insert(0, data[5])
+        else:
+            self.add_element_table_row()
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.add_element_table_row).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Remove", command=self.remove_element_table_row).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=self.save_elements_from_table).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Display", command=self.display_elements_from_table).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.geometry_dialog.destroy).pack(side=tk.LEFT)
+
+    def add_element_table_row(self):
+        row_entries = []
+        row_num = len(self.element_table_entries) + 1
+
+        element_label = tk.Label(self.element_table_frame, text=f"E{row_num}", relief=tk.RIDGE, width=15)
+        element_label.grid(row=row_num, column=0)
+        row_entries.append(element_label)
+
+        node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
+        if not node_names:
+            node_names = [""]
+
+        start_node_var = tk.StringVar()
+        start_node_menu = tk.OptionMenu(self.element_table_frame, start_node_var, *node_names)
+        start_node_menu.grid(row=row_num, column=1)
+        row_entries.append(start_node_var)
+
+        end_node_var = tk.StringVar()
+        end_node_menu = tk.OptionMenu(self.element_table_frame, end_node_var, *node_names)
+        end_node_menu.grid(row=row_num, column=2)
+        row_entries.append(end_node_var)
+
+        moment_release_start_entry = tk.Entry(self.element_table_frame, width=15)
+        moment_release_start_entry.grid(row=row_num, column=3)
+        row_entries.append(moment_release_start_entry)
+
+        moment_release_end_entry = tk.Entry(self.element_table_frame, width=15)
+        moment_release_end_entry.grid(row=row_num, column=4)
+        row_entries.append(moment_release_end_entry)
+
+        self.element_table_entries.append(row_entries)
+
+    def update_element_tab_dropdowns(self):
+        node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
+        if not node_names:
+            node_names = [""]
+
+        for row in self.element_table_entries:
+            start_node_var = row[1]
+            start_node_menu = self.element_table_frame.grid_slaves(row=self.element_table_entries.index(row)+1, column=1)[0]
+            start_node_menu['menu'].delete(0, 'end')
+            for name in node_names:
+                start_node_menu['menu'].add_command(label=name, command=tk._setit(start_node_var, name))
+
+            end_node_var = row[2]
+            end_node_menu = self.element_table_frame.grid_slaves(row=self.element_table_entries.index(row)+1, column=2)[0]
+            end_node_menu['menu'].delete(0, 'end')
+            for name in node_names:
+                end_node_menu['menu'].add_command(label=name, command=tk._setit(end_node_var, name))
+
+    def remove_element_table_row(self):
+        if len(self.element_table_entries) > 1:
+            row_to_remove = self.element_table_entries.pop()
+            for widget in row_to_remove:
+                if isinstance(widget, tk.StringVar):
+                    continue
+                widget.destroy()
+
+    def save_elements_from_table(self, close_dialog=True):
+        try:
+            self.elements_data = []
+            for row in self.element_table_entries:
+                start_node = int(row[1].get().replace("N", "")) - 1
+                end_node = int(row[2].get().replace("N", "")) - 1
+                moment_release_start = row[3].get()
+                moment_release_end = row[4].get()
+
+                x1, y1, _ = self.nodes_data[start_node]
+                x2, y2, _ = self.nodes_data[end_node]
+
+                self.elements_data.append([x1, y1, x2, y2, moment_release_start, moment_release_end])
+
+            if close_dialog:
+                self.geometry_dialog.destroy()
+        except ValueError:
+            messagebox.showerror("Input Error", "Please select start and end nodes for all elements.")
+            return
+
+    def display_elements_from_table(self):
+        self.save_elements_from_table(close_dialog=False)
+        self.display_model()
+
+    def setup_node_tab(self, tab):
+        self.node_table_frame = tk.Frame(tab)
+        self.node_table_frame.pack()
+
+        headers = ["Node", "x", "y", "Support"]
+        for i, header in enumerate(headers):
+            tk.Label(self.node_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.node_table_entries = []
+        if self.nodes_data:
+            for i, data in enumerate(self.nodes_data):
+                self.add_node_table_row()
+                self.node_table_entries[i][1].insert(0, data[0])
+                self.node_table_entries[i][2].insert(0, data[1])
+                self.node_table_entries[i][3].insert(0, data[2])
+        else:
+            self.add_node_table_row()
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.add_node_table_row).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Remove", command=self.remove_node_table_row).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=self.save_nodes_from_table).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Display", command=self.display_nodes_from_table).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.geometry_dialog.destroy).pack(side=tk.LEFT)
+
+    def add_node_table_row(self):
+        row_entries = []
+        row_num = len(self.node_table_entries) + 1
+
+        node_label = tk.Label(self.node_table_frame, text=f"N{row_num}", relief=tk.RIDGE, width=15)
+        node_label.grid(row=row_num, column=0)
+        row_entries.append(node_label)
+
+        for i in range(1, 4):
+            entry = tk.Entry(self.node_table_frame, width=15)
+            entry.grid(row=row_num, column=i)
+            row_entries.append(entry)
+        self.node_table_entries.append(row_entries)
+
+    def remove_node_table_row(self):
+        if len(self.node_table_entries) > 1:
+            row_to_remove = self.node_table_entries.pop()
+            for widget in row_to_remove:
+                widget.destroy()
+
+    def save_nodes_from_table(self, close_dialog=True):
+        try:
+            self.nodes_data = []
+            length_factor = self.get_length_factor()
+            for row in self.node_table_entries:
+                x = float(row[1].get()) * length_factor
+                y = float(row[2].get()) * length_factor
+                support = row[3].get()
+                self.nodes_data.append([x, y, support])
+            if close_dialog:
+                self.geometry_dialog.destroy()
+        except ValueError:
+            messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
+            return
+
+    def display_nodes_from_table(self):
+        self.save_nodes_from_table(close_dialog=False)
+        self.update_element_tab_dropdowns()
+        self.display_model()
+
+    # ----------------- DRAWING -----------------
+    def draw_support(self, x, y, support):
+        size = 10
+        if "x" in support:
+            self.canvas.create_line(x - size, y, x + size, y, fill="red", width=2)
+        if "y" in support:
+            self.canvas.create_line(x, y - size, x, y + size, fill="red", width=2)
+        if "X" in support:
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="blue", width=2)
+            self.canvas.create_line(x, y - size, x, y - size - 5, fill="blue", width=2)
+
+    def draw_moment_release(self, x, y, release):
+        size = 5
+        if "X" in release:
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="green", width=2)
+        if "Y" in release:
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="green", width=2)
+
+    def display_model(self):
+        self.canvas.delete("all")
+        self.draw_axes()
+        self.lines = []
+
+        if not self.nodes_data and not self.elements_data:
+            return
+
+        x_coords = [n[0] for n in self.nodes_data] + [e[0] for e in self.elements_data] + [e[2] for e in self.elements_data]
+        y_coords = [n[1] for n in self.nodes_data] + [e[1] for e in self.elements_data] + [e[3] for e in self.elements_data]
+        min_x, max_x = min(x_coords), max(x_coords)
+        min_y, max_y = min(y_coords), max(y_coords)
+        width_m = max_x - min_x if max_x != min_x else 1
+        height_m = max_y - min_y if max_y != min_y else 1
+
+        canvas_width, canvas_height = 800, 600
+        scale = min((canvas_width - 100) / width_m, (canvas_height - 100) / height_m) * 0.9
+        center_x, center_y = (max_x + min_x) / 2, (max_y + min_y) / 2
+        canvas_center_x, canvas_center_y = 400, 300
+
+        node_map = {}
+        node_id = 1
+
+        for i, node_data in enumerate(self.nodes_data):
+            x = canvas_center_x + (node_data[0] - center_x) * scale
+            y = canvas_center_y - (node_data[1] - center_y) * scale
+
+            if (x, y) not in node_map:
+                node_map[(x,y)] = f"N{i+1}"
+                self.canvas.create_oval(x - 4, y - 4, x + 4, y + 4, fill="black")
+                self.canvas.create_text(x + 10, y - 10, text=f"N{i+1}", fill="blue")
+
+            if node_data[2]:
+                self.draw_support(x, y, node_data[2])
+
+        for e in self.elements_data:
+            x1 = canvas_center_x + (e[0] - center_x) * scale
+            y1 = canvas_center_y - (e[1] - center_y) * scale
+            x2 = canvas_center_x + (e[2] - center_x) * scale
+            y2 = canvas_center_y - (e[3] - center_y) * scale
+
+            line = self.canvas.create_line(x1, y1, x2, y2, width=2)
             self.lines.append(line)
-            self.start_x = None
-            self.start_y = None
 
+            if e[4]:
+                self.draw_moment_release(x1, y1, e[4])
+            if e[5]:
+                self.draw_moment_release(x2, y2, e[5])
+
+    # ---------------- FEM Analysis ----------------
     def analyze(self):
-        nodes = []
+        if not self.elements_data:
+            messagebox.showerror("Error", "No elements to analyze.")
+            return
+        if not self.properties:
+            messagebox.showerror("Error", "Load properties first.")
+            return
+
+        # Prepare node list
+        fem_nodes = [fem.Node(x, y) for x, y, support in self.nodes_data]
+
+        # Prepare elements
         elements = []
+        for e in self.elements_data:
+            start_node_index = self.get_node_index_from_coords(e[0], e[1])
+            end_node_index = self.get_node_index_from_coords(e[2], e[3])
+            n1 = fem_nodes[start_node_index]
+            n2 = fem_nodes[end_node_index]
+            elements.append(fem.FrameElement(n1, n2, self.properties['E'], self.properties['A'], self.properties['I'], e[4], e[5]))
 
-        for line in self.lines:
-            coords = self.canvas.coords(line)
-            node1 = fem.Node(coords[0], coords[1])
-            node2 = fem.Node(coords[2], coords[3])
+        # Assemble global stiffness matrix
+        K = fem.assemble_stiffness_matrix(elements, fem_nodes)
 
-            if node1 not in nodes:
-                nodes.append(node1)
-            if node2 not in nodes:
-                nodes.append(node2)
+        # Apply example load: downward force on node 2
+        F = np.zeros(len(fem_nodes) * 3)
+        F[5] = -100 * self.get_force_factor()  # Example load scaled by units
 
-            element = fem.FrameElement(node1, node2, self.properties['E'], self.properties['A'], self.properties['I'])
-            elements.append(element)
+        # Boundary conditions
+        bcs = []
+        for i, node_data in enumerate(self.nodes_data):
+            support = node_data[2]
+            if "x" in support: bcs.append(i * 3)
+            if "y" in support: bcs.append(i * 3 + 1)
+            if "X" in support: bcs.append(i * 3 + 2)
 
-        num_nodes = len(nodes)
-        K = fem.assemble_stiffness_matrix(elements, nodes)
+        # Solve
+        U = fem.solve(K, F, bcs)
 
-        F = np.zeros(num_nodes * 3)
-        F[5] = -100 # Hardcoded load for now
+        messagebox.showinfo("Analysis Complete", f"Displacements:\n{U}")
 
-        boundary_conditions = [0, 1, 2] # Hardcoded boundary conditions
-
-        U = fem.solve(K, F, boundary_conditions)
-        self.draw_deformed_shape(U, nodes, elements)
-        self.draw_moment_diagram(U, nodes, elements)
-        self.draw_shear_diagram(U, nodes, elements)
-
-
-    def draw_deformed_shape(self, U, nodes, elements):
-        scale = 100 # Scaling factor for displacements
-        self.canvas.delete("results") # Clear previous results
-        for element in elements:
-            n1_index = nodes.index(element.node1)
-            n2_index = nodes.index(element.node2)
-
-            x1, y1 = element.node1.x, element.node1.y
-            x2, y2 = element.node2.x, element.node2.y
-
-            dx1, dy1 = U[n1_index*3], U[n1_index*3+1]
-            dx2, dy2 = U[n2_index*3], U[n2_index*3+1]
-
-            self.canvas.create_line(x1 + dx1*scale, y1 + dy1*scale, x2 + dx2*scale, y2 + dy2*scale, fill="blue", tags="results")
-
-    def draw_moment_diagram(self, U, nodes, elements):
-        scale = 0.1
-        for element in elements:
-            forces = fem.get_element_forces(element, U, nodes)
-            M1 = forces[2]
-            M2 = forces[5]
-
-            x1, y1 = element.node1.x, element.node1.y
-            x2, y2 = element.node2.x, element.node2.y
-
-            self.canvas.create_line(x1, y1, x1, y1 - M1*scale, fill="red", tags="results")
-            self.canvas.create_line(x2, y2, x2, y2 - M2*scale, fill="red", tags="results")
-            self.canvas.create_line(x1, y1 - M1*scale, x2, y2 - M2*scale, fill="red", tags="results")
-
-    def draw_shear_diagram(self, U, nodes, elements):
-        scale = 0.1
-        for element in elements:
-            forces = fem.get_element_forces(element, U, nodes)
-            V1 = forces[1]
-            V2 = -forces[4]
-
-            x1, y1 = element.node1.x, element.node1.y
-            x2, y2 = element.node2.x, element.node2.y
-
-            self.canvas.create_line(x1, y1, x1, y1 - V1*scale, fill="green", tags="results")
-            self.canvas.create_line(x2, y2, x2, y2 - V2*scale, fill="green", tags="results")
-            self.canvas.create_line(x1, y1 - V1*scale, x2, y2 - V2*scale, fill="green", tags="results")
-
+    def get_node_index_from_coords(self, x, y):
+        for i, node_data in enumerate(self.nodes_data):
+            if node_data[0] == x and node_data[1] == y:
+                return i
+        return -1
 
 if __name__ == "__main__":
     root = tk.Tk()
