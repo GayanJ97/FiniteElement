@@ -94,6 +94,7 @@ class FrameAnalyzer:
 
         self.setup_node_tab(node_tab)
         self.setup_element_tab(element_tab)
+        self.update_element_tab_dropdowns()
 
     def setup_element_tab(self, tab):
         self.element_table_frame = tk.Frame(tab)
@@ -124,6 +125,8 @@ class FrameAnalyzer:
         row_entries.append(element_label)
 
         node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
+        if not node_names:
+            node_names = [""]
 
         start_node_var = tk.StringVar()
         start_node_menu = tk.OptionMenu(self.element_table_frame, start_node_var, *node_names)
@@ -140,6 +143,24 @@ class FrameAnalyzer:
         row_entries.append(moment_release_entry)
 
         self.element_table_entries.append(row_entries)
+
+    def update_element_tab_dropdowns(self):
+        node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
+        if not node_names:
+            node_names = [""]
+
+        for row in self.element_table_entries:
+            start_node_var = row[1]
+            start_node_menu = self.element_table_frame.grid_slaves(row=self.element_table_entries.index(row)+1, column=1)[0]
+            start_node_menu['menu'].delete(0, 'end')
+            for name in node_names:
+                start_node_menu['menu'].add_command(label=name, command=tk._setit(start_node_var, name))
+
+            end_node_var = row[2]
+            end_node_menu = self.element_table_frame.grid_slaves(row=self.element_table_entries.index(row)+1, column=2)[0]
+            end_node_menu['menu'].delete(0, 'end')
+            for name in node_names:
+                end_node_menu['menu'].add_command(label=name, command=tk._setit(end_node_var, name))
 
     def remove_element_table_row(self):
         if len(self.element_table_entries) > 1:
@@ -181,7 +202,14 @@ class FrameAnalyzer:
             tk.Label(self.node_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
         self.node_table_entries = []
-        self.add_node_table_row()
+        if self.nodes_data:
+            for i, data in enumerate(self.nodes_data):
+                self.add_node_table_row()
+                self.node_table_entries[i][1].insert(0, data[0])
+                self.node_table_entries[i][2].insert(0, data[1])
+                self.node_table_entries[i][3].insert(0, data[2])
+        else:
+            self.add_node_table_row()
 
         button_frame = tk.Frame(tab)
         button_frame.pack()
@@ -229,6 +257,7 @@ class FrameAnalyzer:
 
     def display_nodes_from_table(self):
         self.save_nodes_from_table(close_dialog=False)
+        self.update_element_tab_dropdowns()
         self.display_model()
 
     # ----------------- DRAWING -----------------
@@ -316,17 +345,11 @@ class FrameAnalyzer:
 
         # Boundary conditions
         bcs = []
-        for i, node in enumerate(nodes):
-            for e in self.elements_data:
-                if (node[0], node[1]) == (e[0], e[1]):
-                    support = e[4]
-                elif (node[0], node[1]) == (e[2], e[3]):
-                    support = e[5]
-                else:
-                    continue
-                if "x" in support: bcs.append(i * 3)
-                if "y" in support: bcs.append(i * 3 + 1)
-                if "X" in support: bcs.append(i * 3 + 2)
+        for i, node_data in enumerate(self.nodes_data):
+            support = node_data[2]
+            if "x" in support: bcs.append(i * 3)
+            if "y" in support: bcs.append(i * 3 + 1)
+            if "X" in support: bcs.append(i * 3 + 2)
 
         # Solve
         U = fem.solve(K, F, bcs)
