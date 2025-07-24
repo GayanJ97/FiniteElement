@@ -159,7 +159,33 @@ class FrameAnalyzer:
             tk.Label(self.table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
         self.table_entries = []
-        self.add_table_row()
+        if self.elements_data:
+            nodes = []
+            for i, data in enumerate(self.elements_data):
+                self.add_table_row()
+                self.table_entries[i][1].insert(0, data[0])
+                self.table_entries[i][2].insert(0, data[1])
+                self.table_entries[i][3].insert(0, data[2])
+                self.table_entries[i][4].insert(0, data[3])
+
+                node1 = fem.Node(data[0], data[1])
+                node2 = fem.Node(data[2], data[3])
+                if node1 not in nodes:
+                    nodes.append(node1)
+                if node2 not in nodes:
+                    nodes.append(node2)
+
+                n1_index = nodes.index(node1)
+                n2_index = nodes.index(node2)
+
+                support_start = self.get_support_string(n1_index)
+                support_end = self.get_support_string(n2_index)
+
+                self.table_entries[i][5].insert(0, support_start)
+                self.table_entries[i][6].insert(0, support_end)
+
+        else:
+            self.add_table_row()
 
         button_frame = tk.Frame(self.line_dialog)
         button_frame.pack()
@@ -180,29 +206,6 @@ class FrameAnalyzer:
         cancel_button.pack(side=tk.LEFT)
 
     def display_model_from_dialog(self):
-        self.create_lines_from_table(close_dialog=False)
-
-    def add_table_row(self):
-        row_entries = []
-        row_num = len(self.table_entries) + 1
-
-        element_no_label = tk.Label(self.table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
-        element_no_label.grid(row=row_num, column=0)
-        row_entries.append(element_no_label)
-
-        for i in range(1, 7):
-            entry = tk.Entry(self.table_frame, width=15)
-            entry.grid(row=row_num, column=i)
-            row_entries.append(entry)
-        self.table_entries.append(row_entries)
-
-    def remove_table_row(self):
-        if len(self.table_entries) > 1:
-            row_to_remove = self.table_entries.pop()
-            for widget in row_to_remove:
-                widget.destroy()
-
-    def create_lines_from_table(self, close_dialog=True):
         self.elements_data = []
         self.boundary_conditions = []
         nodes = []
@@ -240,10 +243,32 @@ class FrameAnalyzer:
                 self.boundary_conditions.append(n2_index * 3 + 1)
             if "X" in support_end:
                 self.boundary_conditions.append(n2_index * 3 + 2)
+        self.display_model()
 
+    def add_table_row(self):
+        row_entries = []
+        row_num = len(self.table_entries) + 1
+
+        element_no_label = tk.Label(self.table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
+        element_no_label.grid(row=row_num, column=0)
+        row_entries.append(element_no_label)
+
+        for i in range(1, 7):
+            entry = tk.Entry(self.table_frame, width=15)
+            entry.grid(row=row_num, column=i)
+            row_entries.append(entry)
+        self.table_entries.append(row_entries)
+
+    def remove_table_row(self):
+        if len(self.table_entries) > 1:
+            row_to_remove = self.table_entries.pop()
+            for widget in row_to_remove:
+                widget.destroy()
+
+    def create_lines_from_table(self, close_dialog=True):
+        self.display_model_from_dialog()
         if close_dialog:
             self.line_dialog.destroy()
-        self.display_model()
 
     def display_model(self):
         self.canvas.delete("all")
@@ -273,6 +298,16 @@ class FrameAnalyzer:
                 self.canvas.create_line(node.x-5, node.y, node.x+5, node.y, fill="red")
             elif dof == 2: # moment restrained
                 self.canvas.create_oval(node.x-5, node.y-5, node.x+5, node.y+5, outline="red")
+
+    def get_support_string(self, node_index):
+        support_string = ""
+        if node_index * 3 in self.boundary_conditions:
+            support_string += "x"
+        if node_index * 3 + 1 in self.boundary_conditions:
+            support_string += "y"
+        if node_index * 3 + 2 in self.boundary_conditions:
+            support_string += "X"
+        return support_string
 
 
 if __name__ == "__main__":
