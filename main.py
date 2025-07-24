@@ -37,6 +37,7 @@ class FrameAnalyzer:
         self.lines = []
         self.elements_data = []  # [x1, y1, x2, y2, support_start, support_end]
         self.nodes_data = [] # [x, y, support]
+        self.materials_data = [] # [name, unit_weight, E, nu, G, alpha]
         self.properties = {}
         self.current_units = {"force": "kN", "length": "m", "temperature": "C"}
 
@@ -71,8 +72,10 @@ class FrameAnalyzer:
     def change_units(self, selected):
         force, length, temp = selected.split(", ")
         self.current_units = {"force": force, "length": length, "temperature": temp}
+
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
+
 
     # ------------------ DIALOG HANDLING ------------------
     def open_geometry_dialog(self):
@@ -93,16 +96,139 @@ class FrameAnalyzer:
         notebook.add(element_tab, text="Element")
 
         self.setup_node_tab(node_tab)
+        self.setup_material_tab(material_tab)
         self.setup_element_tab(element_tab)
         self.update_element_tab_dropdowns()
 
+    def setup_material_tab(self, tab):
+        table_frame = tk.Frame(tab)
+        table_frame.pack()
+
+        headers = ["No.", "Material"]
+        for i, header in enumerate(headers):
+            tk.Label(table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.material_table_entries = []
+        self.selected_material_index = None
+        # self.add_material_table_row() # To be implemented
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.open_material_dialog).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Remove", command=self.remove_material).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Modify", command=self.modify_material).pack(side=tk.LEFT)
+
+    def open_material_dialog(self, modify=False, material_index=None):
+        self.material_dialog = tk.Toplevel(self.geometry_dialog)
+        self.material_dialog.title("Material Properties")
+
+        tk.Label(self.material_dialog, text="Material Name:").grid(row=0, column=0)
+        self.material_name_entry = tk.Entry(self.material_dialog)
+        self.material_name_entry.grid(row=0, column=1)
+
+        tk.Label(self.material_dialog, text="Unit Weight:").grid(row=1, column=0)
+        self.unit_weight_entry = tk.Entry(self.material_dialog)
+        self.unit_weight_entry.grid(row=1, column=1)
+
+        tk.Label(self.material_dialog, text="Young's Modulus:").grid(row=2, column=0)
+        self.young_modulus_entry = tk.Entry(self.material_dialog)
+        self.young_modulus_entry.grid(row=2, column=1)
+
+        tk.Label(self.material_dialog, text="Poisson's Ratio:").grid(row=3, column=0)
+        self.poisson_ratio_entry = tk.Entry(self.material_dialog)
+        self.poisson_ratio_entry.grid(row=3, column=1)
+
+        tk.Label(self.material_dialog, text="Shear Modulus:").grid(row=4, column=0)
+        self.shear_modulus_entry = tk.Entry(self.material_dialog)
+        self.shear_modulus_entry.grid(row=4, column=1)
+
+        tk.Label(self.material_dialog, text="Thermal Expansion Coefficient:").grid(row=5, column=0)
+        self.thermal_expansion_entry = tk.Entry(self.material_dialog)
+        self.thermal_expansion_entry.grid(row=5, column=1)
+
+        ok_button = tk.Button(self.material_dialog, text="OK", command=lambda: self.save_material(modify, material_index))
+        ok_button.grid(row=6, column=0)
+
+        cancel_button = tk.Button(self.material_dialog, text="Cancel", command=self.material_dialog.destroy)
+        cancel_button.grid(row=6, column=1)
+
+    def add_material_table_row(self, name):
+        row_num = len(self.material_table_entries) + 1
+
+        no_label = tk.Label(self.material_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
+        no_label.grid(row=row_num, column=0)
+
+        name_label = tk.Label(self.material_table_frame, text=name, relief=tk.RIDGE, width=15)
+        name_label.grid(row=row_num, column=1)
+
+        def on_click(event, index=row_num-1):
+            self.selected_material_index = index
+            for row in self.material_table_entries:
+                row[0].config(bg="white")
+                row[1].config(bg="white")
+            self.material_table_entries[index][0].config(bg="lightblue")
+            self.material_table_entries[index][1].config(bg="lightblue")
+
+        no_label.bind("<Button-1>", on_click)
+        name_label.bind("<Button-1>", on_click)
+
+        self.material_table_entries.append((no_label, name_label))
+
+    def save_material(self, modify, material_index):
+        name = self.material_name_entry.get()
+        unit_weight = float(self.unit_weight_entry.get())
+        E = float(self.young_modulus_entry.get())
+        nu = float(self.poisson_ratio_entry.get())
+        G = float(self.shear_modulus_entry.get())
+        alpha = float(self.thermal_expansion_entry.get())
+
+        material_data = [name, unit_weight, E, nu, G, alpha]
+
+        if modify:
+            self.materials_data[material_index] = material_data
+            # Update the table
+            self.material_table_entries[material_index][1].config(text=name)
+        else:
+            self.materials_data.append(material_data)
+            self.add_material_table_row(name)
+
+        self.material_dialog.destroy()
+
+    def remove_material(self):
+        if self.selected_material_index is not None:
+            self.materials_data.pop(self.selected_material_index)
+            for widget in self.material_table_entries[self.selected_material_index]:
+                widget.destroy()
+            self.material_table_entries.pop(self.selected_material_index)
+            # Re-number the remaining materials
+            for i, row in enumerate(self.material_table_entries):
+                row[0].config(text=str(i+1))
+            self.selected_material_index = None
+
+    def modify_material(self):
+        if self.selected_material_index is not None:
+            self.open_material_dialog(modify=True, material_index=self.selected_material_index)
+
     def update_node_dialog_display(self):
-        display_factor = 1 / self.get_length_factor()
+        unit = self.current_units["length"]
         for i, data in enumerate(self.nodes_data):
+            if unit == "mm":
+                x_display = data[0] * 1000
+                y_display = data[1] * 1000
+            else:
+                x_display = data[0]
+                y_display = data[1]
+
             self.node_table_entries[i][1].delete(0, tk.END)
-            self.node_table_entries[i][1].insert(0, round(data[0] * display_factor, 3))
+            self.node_table_entries[i][1].insert(0, round(x_display, 3))
+
             self.node_table_entries[i][2].delete(0, tk.END)
-            self.node_table_entries[i][2].insert(0, round(data[1] * display_factor, 3))
+            self.node_table_entries[i][2].insert(0, round(y_display, 3))
+
+            self.node_table_entries[i][3].delete(0, tk.END)
+            self.node_table_entries[i][3].insert(0, data[2])
+
 
     def setup_element_tab(self, tab):
         self.element_table_frame = tk.Frame(tab)
@@ -228,9 +354,13 @@ class FrameAnalyzer:
         if self.nodes_data:
             for i, data in enumerate(self.nodes_data):
                 self.add_node_table_row()
-                self.node_table_entries[i][1].insert(0, data[0])
-                self.node_table_entries[i][2].insert(0, data[1])
+                length_unit = self.current_units["length"]
+                x_display = data[0] * 1000 if length_unit == "mm" else data[0]
+                y_display = data[1] * 1000 if length_unit == "mm" else data[1]
+                self.node_table_entries[i][1].insert(0, round(x_display, 3))
+                self.node_table_entries[i][2].insert(0, round(y_display, 3))
                 self.node_table_entries[i][3].insert(0, data[2])
+
         else:
             self.add_node_table_row()
 
@@ -266,17 +396,26 @@ class FrameAnalyzer:
     def save_nodes_from_table(self, close_dialog=True):
         try:
             self.nodes_data = []
-            length_factor = self.get_length_factor()
+            unit = self.current_units["length"]  # "m" or "mm"
             for row in self.node_table_entries:
-                x = float(row[1].get()) * length_factor
-                y = float(row[2].get()) * length_factor
+                x_input = float(row[1].get())
+                y_input = float(row[2].get())
                 support = row[3].get()
-                self.nodes_data.append([x, y, support])
+
+                # Always store in meters
+                if unit == "mm":
+                    x = x_input / 1000
+                    y = y_input / 1000
+                else:
+                    x = x_input
+                    y = y_input
+
+                self.nodes_data.append([x, y, support])  # Internal always in meters
+
             if close_dialog:
                 self.geometry_dialog.destroy()
         except ValueError:
             messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
-            return
 
     def display_nodes_from_table(self):
         self.save_nodes_from_table(close_dialog=False)
@@ -396,6 +535,12 @@ class FrameAnalyzer:
             if node_data[0] == x and node_data[1] == y:
                 return i
         return -1
+
+    def change_units(self, selected):
+        force, length, temp = selected.split(", ")
+        self.current_units = {"force": force, "length": length, "temperature": temp}
+        if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
+            self.update_node_dialog_display()
 
 if __name__ == "__main__":
     root = tk.Tk()
