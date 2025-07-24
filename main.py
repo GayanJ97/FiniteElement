@@ -32,6 +32,7 @@ class FrameAnalyzer:
         self.start_x = None
         self.start_y = None
         self.lines = []
+        self.elements_data = []
         self.properties = {}
 
         self.canvas.bind("<Button-1>", self.on_click)
@@ -44,7 +45,7 @@ class FrameAnalyzer:
         self.canvas.create_line(50, 550, 750, 550, arrow=tk.LAST)
         self.canvas.create_text(760, 550, text="X")
         self.canvas.create_line(50, 550, 50, 50, arrow=tk.LAST)
-        self.canvas.create_text(50, 40, text="Z")
+        self.canvas.create_text(50, 40, text="Y")
 
     def load_properties(self):
         filepath = filedialog.askopenfilename()
@@ -199,7 +200,7 @@ class FrameAnalyzer:
                 widget.destroy()
 
     def create_lines_from_table(self):
-        self.lines = []
+        self.elements_data = []
         self.boundary_conditions = []
         nodes = []
         for row in self.table_entries:
@@ -209,6 +210,8 @@ class FrameAnalyzer:
             y2 = float(row[4].get())
             support_start = row[5].get()
             support_end = row[6].get()
+
+            self.elements_data.append([x1, y1, x2, y2])
 
             node1 = fem.Node(x1, y1)
             node2 = fem.Node(x2, y2)
@@ -235,28 +238,28 @@ class FrameAnalyzer:
             if "X" in support_end:
                 self.boundary_conditions.append(n2_index * 3 + 2)
 
-            line = self.canvas.create_line(x1, y1, x2, y2)
-            self.lines.append(line)
         self.line_dialog.destroy()
+        self.display_model()
 
     def display_model(self):
         self.canvas.delete("all")
         self.draw_axes()
-        for line in self.lines:
-            coords = self.canvas.coords(line)
-            self.canvas.create_line(coords)
+        self.lines = []
+        for element_data in self.elements_data:
+            line = self.canvas.create_line(element_data)
+            self.lines.append(line)
 
         nodes = []
-        for line in self.lines:
-            coords = self.canvas.coords(line)
-            node1 = fem.Node(coords[0], coords[1])
-            node2 = fem.Node(coords[2], coords[3])
+        for element_data in self.elements_data:
+            node1 = fem.Node(element_data[0], element_data[1])
+            node2 = fem.Node(element_data[2], element_data[3])
             if node1 not in nodes:
                 nodes.append(node1)
             if node2 not in nodes:
                 nodes.append(node2)
 
-        for i, bc in enumerate(self.boundary_conditions):
+        if hasattr(self, 'boundary_conditions'):
+            for i, bc in enumerate(self.boundary_conditions):
             node_index = bc // 3
             dof = bc % 3
             node = nodes[node_index]
