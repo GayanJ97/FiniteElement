@@ -100,7 +100,7 @@ class FrameAnalyzer:
         self.element_table_frame = tk.Frame(tab)
         self.element_table_frame.pack()
 
-        headers = ["Element", "Start", "End", "Moment Release"]
+        headers = ["Element", "Start", "End", "Moment Release Start", "Moment Release End"]
         for i, header in enumerate(headers):
             tk.Label(self.element_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
@@ -113,6 +113,7 @@ class FrameAnalyzer:
                 self.element_table_entries[i][1].set(f"N{start_node_index+1}")
                 self.element_table_entries[i][2].set(f"N{end_node_index+1}")
                 self.element_table_entries[i][3].insert(0, data[4])
+                self.element_table_entries[i][4].insert(0, data[5])
         else:
             self.add_element_table_row()
 
@@ -147,9 +148,13 @@ class FrameAnalyzer:
         end_node_menu.grid(row=row_num, column=2)
         row_entries.append(end_node_var)
 
-        moment_release_entry = tk.Entry(self.element_table_frame, width=15)
-        moment_release_entry.grid(row=row_num, column=3)
-        row_entries.append(moment_release_entry)
+        moment_release_start_entry = tk.Entry(self.element_table_frame, width=15)
+        moment_release_start_entry.grid(row=row_num, column=3)
+        row_entries.append(moment_release_start_entry)
+
+        moment_release_end_entry = tk.Entry(self.element_table_frame, width=15)
+        moment_release_end_entry.grid(row=row_num, column=4)
+        row_entries.append(moment_release_end_entry)
 
         self.element_table_entries.append(row_entries)
 
@@ -185,12 +190,13 @@ class FrameAnalyzer:
             for row in self.element_table_entries:
                 start_node = int(row[1].get().replace("N", "")) - 1
                 end_node = int(row[2].get().replace("N", "")) - 1
-                moment_release = row[3].get()
+                moment_release_start = row[3].get()
+                moment_release_end = row[4].get()
 
                 x1, y1, _ = self.nodes_data[start_node]
                 x2, y2, _ = self.nodes_data[end_node]
 
-                self.elements_data.append([x1, y1, x2, y2, moment_release])
+                self.elements_data.append([x1, y1, x2, y2, moment_release_start, moment_release_end])
 
             if close_dialog:
                 self.geometry_dialog.destroy()
@@ -280,6 +286,13 @@ class FrameAnalyzer:
             self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="blue", width=2)
             self.canvas.create_line(x, y - size, x, y - size - 5, fill="blue", width=2)
 
+    def draw_moment_release(self, x, y, release):
+        size = 5
+        if "X" in release:
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="green", width=2)
+        if "Y" in release:
+            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="green", width=2)
+
     def display_model(self):
         self.canvas.delete("all")
         self.draw_axes()
@@ -324,6 +337,11 @@ class FrameAnalyzer:
             line = self.canvas.create_line(x1, y1, x2, y2, width=2)
             self.lines.append(line)
 
+            if e[4]:
+                self.draw_moment_release(x1, y1, e[4])
+            if e[5]:
+                self.draw_moment_release(x2, y2, e[5])
+
     # ---------------- FEM Analysis ----------------
     def analyze(self):
         if not self.elements_data:
@@ -343,7 +361,7 @@ class FrameAnalyzer:
             end_node_index = self.get_node_index_from_coords(e[2], e[3])
             n1 = fem_nodes[start_node_index]
             n2 = fem_nodes[end_node_index]
-            elements.append(fem.FrameElement(n1, n2, self.properties['E'], self.properties['A'], self.properties['I'], e[4]))
+            elements.append(fem.FrameElement(n1, n2, self.properties['E'], self.properties['A'], self.properties['I'], e[4], e[5]))
 
         # Assemble global stiffness matrix
         K = fem.assemble_stiffness_matrix(elements, fem_nodes)
