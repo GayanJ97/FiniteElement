@@ -98,6 +98,8 @@ class FrameAnalyzer:
             "elements": self.elements_data,
             "materials": self.materials_data,
             "sections": self.sections_data,
+            "load_patterns": self.load_patterns_data,
+            "load_combinations": self.load_combinations_data,
         }
 
         filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
@@ -117,6 +119,8 @@ class FrameAnalyzer:
             self.elements_data = project_data["elements"]
             self.materials_data = project_data["materials"]
             self.sections_data = project_data["sections"]
+            self.load_patterns_data = project_data["load_patterns"]
+            self.load_combinations_data = project_data["load_combinations"]
 
             self.display_model()
             self.change_units(self.units_var.get())
@@ -181,7 +185,7 @@ class FrameAnalyzer:
                 self.add_section_table_row(section[0], material_name)
                 if section[3] is not None:
                     material_name = self.materials_data[section[3]][0] if section[3] is not None and section[3] < len(self.materials_data) else ""
-                    self.section_table_entries[-1][2].config(text=material_name)
+                    self.section_table_entries[-1][2].set(material_name)
 
 
         button_frame = tk.Frame(tab)
@@ -297,8 +301,14 @@ class FrameAnalyzer:
         name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
         name_label.grid(row=row_num, column=1)
 
-        material_label = tk.Label(self.section_table_frame, text=material_name, relief=tk.RIDGE, width=15)
-        material_label.grid(row=row_num, column=2)
+        material_names = [m[0] for m in self.materials_data]
+        if not material_names:
+            material_names = [""]
+        material_var = tk.StringVar()
+        if material_name:
+            material_var.set(material_name)
+        material_menu = tk.OptionMenu(self.section_table_frame, material_var, *material_names)
+        material_menu.grid(row=row_num, column=2)
 
         def on_click(event, index=row_num-1):
             self.selected_section_index = index
@@ -313,7 +323,7 @@ class FrameAnalyzer:
         no_label.bind("<Button-1>", on_click)
         name_label.bind("<Button-1>", on_click)
 
-        self.section_table_entries.append((no_label, name_label, material_label))
+        self.section_table_entries.append((no_label, name_label, material_var))
 
 
     def save_section(self, section_type, modify=False, section_index=None):
@@ -777,7 +787,7 @@ class FrameAnalyzer:
             self.canvas.create_polygon(x - base, y + size, x + base, y + size, x, y, fill="blue", outline="black")
 
         elif support == "y":  # Vertical Roller
-            self.canvas.create_polygon(x - base, y, x + base, y, x, y + size, fill="white", outline="black")
+            self.canvas.create_polygon(x - base, y + size, x + base, y + size, x, y, fill="white", outline="black")
             self.canvas.create_oval(x - 10, y + size, x - 6, y + size + 4, fill="black")
             self.canvas.create_oval(x + 6, y + size, x + 10, y + size + 4, fill="black")
 
