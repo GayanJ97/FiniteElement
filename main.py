@@ -33,6 +33,9 @@ class FrameAnalyzer:
         self.geometry_button = tk.Button(self.toolbar, text="Geometry", command=self.open_geometry_dialog)
         self.geometry_button.pack(side=tk.TOP)
 
+        self.load_comb_button = tk.Button(self.toolbar, text="Load Comb", command=self.open_load_comb_dialog)
+        self.load_comb_button.pack(side=tk.TOP)
+
         # Unit selection dropdown
         self.units_var = tk.StringVar()
         self.units_var.set("kN, m, C")
@@ -46,6 +49,8 @@ class FrameAnalyzer:
         self.nodes_data = [] # [x, y, support]
         self.materials_data = [] # [name, unit_weight, E, nu, G, alpha]
         self.sections_data = [] # [name, type, properties, material_index]
+        self.load_patterns_data = [] # [name, type]
+        self.load_combinations_data = [] # [name, dead, live, snow, wind]
         self.properties = {}
         self.current_units = {"force": "kN", "length": "m", "temperature": "C"}
 
@@ -77,62 +82,12 @@ class FrameAnalyzer:
     def get_force_factor(self):
         return 1.0 if self.current_units["force"] == "kN" else 0.001  # Convert N to kN if needed
 
-    def change_units(self, selected):
+    def _units(self, selected):
         force, length, temp = selected.split(", ")
         self.current_units = {"force": force, "length": length, "temperature": temp}
 
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
-            if hasattr(self, "material_dialog") and self.material_dialog.winfo_exists():
-                self.update_material_dialog_display()
-
-    def save_project(self):
-        project_data = {
-            "units": self.current_units,
-            "nodes": self.nodes_data,
-            "elements": self.elements_data,
-            "materials": self.materials_data,
-            "sections": self.sections_data,
-        }
-
-        filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
-        if filepath:
-            with open(filepath, 'w') as f:
-                json.dump(project_data, f, indent=4)
-
-    def open_project(self):
-        filepath = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
-        if filepath:
-            with open(filepath, 'r') as f:
-                project_data = json.load(f)
-
-            self.current_units = project_data["units"]
-            self.units_var.set(f"{self.current_units['force']}, {self.current_units['length']}, {self.current_units['temperature']}")
-            self.nodes_data = project_data["nodes"]
-            self.elements_data = project_data["elements"]
-            self.materials_data = project_data["materials"]
-            self.sections_data = project_data["sections"]
-
-            self.display_model()
-
-    def update_material_dialog_display(self, material_index=None):
-        force_unit = self.current_units["force"]
-        length_unit = self.current_units["length"]
-
-        if material_index is not None:
-            material_data = self.materials_data[material_index]
-
-            # Conversion factors
-            force_factor = 1 if force_unit == 'kN' else 1000
-            length_factor = 1 if length_unit == 'm' else 1000
-
-            # Get values and update entries
-            self.material_dialog_entries["Material Name:"].insert(0, material_data[0])
-            self.material_dialog_entries["Unit Weight:"].insert(0, round(material_data[1] * (force_factor / (length_factor**3)), 3))
-            self.material_dialog_entries["Young's Modulus:"].insert(0, round(material_data[2] * (force_factor / (length_factor**2)), 3))
-            self.material_dialog_entries["Poisson's Ratio:"].insert(0, material_data[3])
-            self.material_dialog_entries["Shear Modulus:"].insert(0, round(material_data[4] * (force_factor / (length_factor**2)), 3))
-            self.material_dialog_entries["Thermal Expansion Coefficient:"].insert(0, material_data[5])
 
 
     # ------------------ DIALOG HANDLING ------------------
@@ -159,312 +114,6 @@ class FrameAnalyzer:
         self.setup_element_tab(element_tab)
         self.update_element_tab_dropdowns()
 
-    def setup_section_tab(self, tab):
-        self.section_table_frame = tk.Frame(tab)
-        self.section_table_frame.pack()
-
-        headers = ["No.", "Section Name", "Material"]
-        for i, header in enumerate(headers):
-            tk.Label(self.section_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
-
-        self.section_table_entries = []
-        self.selected_section_index = None
-        if self.sections_data:
-            for section in self.sections_data:
-                self.add_section_table_row(section[0])
-                if section[3] is not None:
-                    self.section_table_entries[-1][2].set(self.materials_data[section[3]][0])
-
-        button_frame = tk.Frame(tab)
-        button_frame.pack()
-
-        tk.Button(button_frame, text="Add", command=self.open_section_type_dialog).pack(side=tk.LEFT)
-        self.remove_section_button = tk.Button(button_frame, text="Remove", command=self.remove_section, state=tk.DISABLED)
-        self.remove_section_button.pack(side=tk.LEFT)
-        self.modify_section_button = tk.Button(button_frame, text="Modify", command=self.modify_section, state=tk.DISABLED)
-        self.modify_section_button.pack(side=tk.LEFT)
-
-    def open_section_type_dialog(self):
-        self.section_type_dialog = tk.Toplevel(self.geometry_dialog)
-        self.section_type_dialog.title("Select Section Type")
-
-        tk.Button(self.section_type_dialog, text="I / Wide Flange", command=self.open_i_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Channel", command=self.open_channel_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Tee", command=self.open_tee_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Angle", command=self.open_angle_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Double Angle", command=self.open_double_angle_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Double Channel", command=self.open_double_channel_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Pipe", command=self.open_pipe_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Tube", command=self.open_tube_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Rectangular", command=self.open_rectangular_section_dialog).pack()
-        tk.Button(self.section_type_dialog, text="Circular", command=self.open_circular_section_dialog).pack()
-
-    def open_i_section_dialog(self):
-        self.open_section_properties_dialog("I / Wide Flange", ["Outside height (h)", "Top flange width (b₁)", "Top flange thickness (t₁)", "Web thickness (tw)", "Bottom flange width (b₂)", "Bottom flange thickness (t₂)", "Fillet radius (r)"])
-
-    def open_channel_section_dialog(self):
-        self.open_section_properties_dialog("Channel", ["Height (h)", "Flange width (b)", "Flange thickness (tf)", "Web thickness (tw)", "Root radius (r)"])
-
-    def open_tee_section_dialog(self):
-        self.open_section_properties_dialog("Tee", ["Flange width (b)", "Flange thickness (tf)", "Stem depth (d)", "Stem thickness (tw)", "Root radius (r)"])
-
-    def open_angle_section_dialog(self):
-        self.open_section_properties_dialog("Angle", ["Leg 1 width (b)", "Leg 2 width (d)", "Leg thickness (t)", "Root radius (r)"])
-
-    def open_double_angle_section_dialog(self):
-        self.open_section_properties_dialog("Double Angle", ["Leg 1 width (b)", "Leg 2 width (d)", "Leg thickness (t)", "Root radius (r)", "Spacing"])
-
-    def open_double_channel_section_dialog(self):
-        self.open_section_properties_dialog("Double Channel", ["Height (h)", "Flange width (b)", "Flange thickness (tf)", "Web thickness (tw)", "Root radius (r)", "Spacing"])
-
-    def open_pipe_section_dialog(self):
-        self.open_section_properties_dialog("Pipe", ["Outer diameter (OD)", "Thickness (t)"])
-
-    def open_tube_section_dialog(self):
-        self.open_section_properties_dialog("Tube", ["Width (b)", "Height (h)", "Thickness (t)", "Corner radius (r)"])
-
-    def open_rectangular_section_dialog(self):
-        self.open_section_properties_dialog("Rectangular", ["Width (b)", "Height (h)"])
-
-    def open_circular_section_dialog(self):
-        self.open_section_properties_dialog("Circular", ["Diameter (d)"])
-
-    def open_section_properties_dialog(self, section_type, labels):
-        self.section_properties_dialog = tk.Toplevel(self.geometry_dialog)
-        self.section_properties_dialog.title(f"{section_type} Properties")
-
-        self.section_properties_entries = {}
-
-        tk.Label(self.section_properties_dialog, text="Section Name:").grid(row=0, column=0)
-        name_entry = tk.Entry(self.section_properties_dialog)
-        name_entry.grid(row=0, column=1)
-        self.section_properties_entries["Section Name:"] = name_entry
-
-        for i, label_text in enumerate(labels):
-            label = tk.Label(self.section_properties_dialog, text=label_text)
-            label.grid(row=i+1, column=0)
-            entry = tk.Entry(self.section_properties_dialog)
-            entry.grid(row=i+1, column=1)
-            self.section_properties_entries[label_text] = entry
-
-        ok_button = tk.Button(self.section_properties_dialog, text="OK", command=lambda: self.save_section(section_type))
-        ok_button.grid(row=len(labels), column=0)
-
-        cancel_button = tk.Button(self.section_properties_dialog, text="Cancel", command=self.section_properties_dialog.destroy)
-        cancel_button.grid(row=len(labels), column=1)
-
-    def add_section_table_row(self, name):
-        row_num = len(self.section_table_entries) + 1
-
-        no_label = tk.Label(self.section_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
-        no_label.grid(row=row_num, column=0)
-
-        name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
-        name_label.grid(row=row_num, column=1)
-
-        material_names = [m[0] for m in self.materials_data]
-        if not material_names:
-            material_names = [""]
-        material_var = tk.StringVar()
-        material_menu = tk.OptionMenu(self.section_table_frame, material_var, *material_names)
-        material_menu.grid(row=row_num, column=2)
-
-        def on_click(event, index=row_num-1):
-            self.selected_section_index = index
-            for row in self.section_table_entries:
-                row[0].config(bg="white")
-                row[1].config(bg="white")
-            self.section_table_entries[index][0].config(bg="lightblue")
-            self.section_table_entries[index][1].config(bg="lightblue")
-            self.remove_section_button.config(state=tk.NORMAL)
-            self.modify_section_button.config(state=tk.NORMAL)
-
-        no_label.bind("<Button-1>", on_click)
-        name_label.bind("<Button-1>", on_click)
-
-        self.section_table_entries.append((no_label, name_label, material_var))
-
-    def save_section(self, section_type, modify=False, section_index=None):
-        properties = {}
-        section_name = self.section_properties_entries["Section Name:"].get()
-        for label, entry in self.section_properties_entries.items():
-            if label != "Section Name:":
-                properties[label] = float(entry.get())
-
-        if modify:
-            material_index = self.sections_data[section_index][3]
-            self.sections_data[section_index] = [section_name, section_type, properties, material_index]
-            self.section_table_entries[section_index][1].config(text=section_name)
-        else:
-            self.sections_data.append([section_name, section_type, properties, None])
-            self.add_section_table_row(section_name)
-
-        self.section_properties_dialog.destroy()
-        if not modify:
-            self.section_type_dialog.destroy()
-
-    def remove_section(self):
-        if self.selected_section_index is not None:
-            self.sections_data.pop(self.selected_section_index)
-            for widget in self.section_table_entries[self.selected_section_index]:
-                if isinstance(widget, tk.StringVar):
-                    continue
-                widget.destroy()
-            self.section_table_entries.pop(self.selected_section_index)
-            # Re-number the remaining sections
-            for i, row in enumerate(self.section_table_entries):
-                row[0].config(text=str(i+1))
-            self.selected_section_index = None
-
-    def modify_section(self):
-        if self.selected_section_index is not None:
-            section_data = self.sections_data[self.selected_section_index]
-            section_type = section_data[1]
-            if section_type == "I / Wide Flange":
-                self.open_i_section_dialog()
-            elif section_type == "Channel":
-                self.open_channel_section_dialog()
-            # ... and so on for the other section types
-
-            # Now populate the dialog with the existing data
-            self.section_properties_dialog.title(f"Modify {section_type} Properties")
-            self.section_properties_entries["Section Name:"].insert(0, section_data[0])
-            for label, entry in self.section_properties_entries.items():
-                if label != "Section Name:":
-                    entry.insert(0, section_data[2][label])
-
-            # Change the OK button to call save_section with modify=True
-            ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
-            ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
-
-    def setup_material_tab(self, tab):
-        self.material_table_frame = tk.Frame(tab)
-        self.material_table_frame.pack()
-
-        headers = ["No.", "Material"]
-        for i, header in enumerate(headers):
-            tk.Label(self.material_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
-
-        self.material_table_entries = []
-        self.selected_material_index = None
-        if self.materials_data:
-            for material in self.materials_data:
-                self.add_material_table_row(material[0])
-
-        button_frame = tk.Frame(tab)
-        button_frame.pack()
-
-        tk.Button(button_frame, text="Add", command=self.open_material_dialog).pack(side=tk.LEFT)
-        self.remove_material_button = tk.Button(button_frame, text="Remove", command=self.remove_material, state=tk.DISABLED)
-        self.remove_material_button.pack(side=tk.LEFT)
-        self.modify_material_button = tk.Button(button_frame, text="Modify", command=self.modify_material, state=tk.DISABLED)
-        self.modify_material_button.pack(side=tk.LEFT)
-
-    def open_material_dialog(self, modify=False, material_index=None):
-        self.material_dialog = tk.Toplevel(self.geometry_dialog)
-        self.material_dialog.title("Material Properties")
-
-        self.material_dialog_entries = {}
-
-        labels = ["Material Name:", "Unit Weight:", "Young's Modulus:", "Poisson's Ratio:", "Shear Modulus:", "Thermal Expansion Coefficient:"]
-        for i, label_text in enumerate(labels):
-            label = tk.Label(self.material_dialog, text=label_text)
-            label.grid(row=i, column=0)
-            entry = tk.Entry(self.material_dialog)
-            entry.grid(row=i, column=1)
-            self.material_dialog_entries[label_text] = entry
-
-        if modify:
-            self.update_material_dialog_display(material_index)
-
-        ok_button = tk.Button(self.material_dialog, text="OK", command=lambda: self.save_material(modify, material_index))
-        ok_button.grid(row=6, column=0)
-
-        cancel_button = tk.Button(self.material_dialog, text="Cancel", command=self.material_dialog.destroy)
-        cancel_button.grid(row=6, column=1)
-
-    def add_material_table_row(self, name):
-        row_num = len(self.material_table_entries) + 1
-
-        no_label = tk.Label(self.material_table_frame, text=str(row_num), relief=tk.RIDGE, width=15)
-        no_label.grid(row=row_num, column=0)
-
-        name_label = tk.Label(self.material_table_frame, text=name, relief=tk.RIDGE, width=15)
-        name_label.grid(row=row_num, column=1)
-
-        def on_click(event, index=row_num-1):
-            self.selected_material_index = index
-            for row in self.material_table_entries:
-                row[0].config(bg="white")
-                row[1].config(bg="white")
-            self.material_table_entries[index][0].config(bg="lightblue")
-            self.material_table_entries[index][1].config(bg="lightblue")
-            self.remove_material_button.config(state=tk.NORMAL)
-            self.modify_material_button.config(state=tk.NORMAL)
-
-        no_label.bind("<Button-1>", on_click)
-        name_label.bind("<Button-1>", on_click)
-
-        self.material_table_entries.append((no_label, name_label))
-
-    def save_material(self, modify, material_index):
-        try:
-            name = self.material_dialog_entries["Material Name:"].get()
-
-            force_unit = self.current_units["force"]
-            length_unit = self.current_units["length"]
-            force_factor = 1 if force_unit == 'kN' else 0.001
-            length_factor = 1 if length_unit == 'm' else 0.001
-
-            unit_weight = float(self.material_dialog_entries["Unit Weight:"].get()) * (force_factor / (length_factor**3))
-            E = float(self.material_dialog_entries["Young's Modulus:"].get()) * (force_factor / (length_factor**2))
-            nu = float(self.material_dialog_entries["Poisson's Ratio:"].get())
-            G = float(self.material_dialog_entries["Shear Modulus:"].get()) * (force_factor / (length_factor**2))
-            alpha = float(self.material_dialog_entries["Thermal Expansion Coefficient:"].get())
-
-            material_data = [name, unit_weight, E, nu, G, alpha]
-        except ValueError:
-            messagebox.showerror("Input Error", "All material property fields must be filled.")
-            return
-
-        if modify:
-            self.materials_data[material_index] = material_data
-            # Update the table
-            self.material_table_entries[material_index][1].config(text=name)
-        else:
-            self.materials_data.append(material_data)
-            self.add_material_table_row(name)
-
-        self.material_dialog.destroy()
-        self.update_section_tab_material_dropdown()
-
-    def update_section_tab_material_dropdown(self):
-        material_names = [m[0] for m in self.materials_data]
-        if not material_names:
-            material_names = [""]
-
-        for row in self.section_table_entries:
-            material_var = row[2]
-            material_menu = self.section_table_frame.grid_slaves(row=self.section_table_entries.index(row)+1, column=2)[0]
-            material_menu['menu'].delete(0, 'end')
-            for name in material_names:
-                material_menu['menu'].add_command(label=name, command=tk._setit(material_var, name))
-
-    def remove_material(self):
-        if self.selected_material_index is not None:
-            self.materials_data.pop(self.selected_material_index)
-            for widget in self.material_table_entries[self.selected_material_index]:
-                widget.destroy()
-            self.material_table_entries.pop(self.selected_material_index)
-            # Re-number the remaining materials
-            for i, row in enumerate(self.material_table_entries):
-                row[0].config(text=str(i+1))
-            self.selected_material_index = None
-
-    def modify_material(self):
-        if self.selected_material_index is not None:
-            self.open_material_dialog(modify=True, material_index=self.selected_material_index)
-
     def update_node_dialog_display(self):
         unit = self.current_units["length"]
         for i, data in enumerate(self.nodes_data):
@@ -489,7 +138,7 @@ class FrameAnalyzer:
         self.element_table_frame = tk.Frame(tab)
         self.element_table_frame.pack()
 
-        headers = ["Element", "Start", "End", "Moment Release Start", "Moment Release End"]
+        headers = ["Element", "Start", "End", "Section", "Moment Release Start", "Moment Release End"]
         for i, header in enumerate(headers):
             tk.Label(self.element_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
@@ -499,10 +148,22 @@ class FrameAnalyzer:
                 self.add_element_table_row()
                 start_node_index = self.get_node_index_from_coords(data[0], data[1])
                 end_node_index = self.get_node_index_from_coords(data[2], data[3])
-                self.element_table_entries[i][1].set(f"N{start_node_index+1}")
-                self.element_table_entries[i][2].set(f"N{end_node_index+1}")
-                self.element_table_entries[i][3].insert(0, data[4])
-                self.element_table_entries[i][4].insert(0, data[5])
+                self.element_table_entries[i][1].set(f"N{start_node_index+1}")  # Start node
+                self.element_table_entries[i][2].set(f"N{end_node_index+1}")    # End node
+
+                # Section dropdown (StringVar)
+                # Check if section index exists in data
+                if len(data) > 6 and data[6] is not None and 0 <= data[6] < len(self.sections_data):
+                    section_name = self.sections_data[data[6]][0]
+                else:
+                    section_name = self.sections_data[0][0] if self.sections_data else ""
+                self.element_table_entries[i][3].set(section_name)
+
+
+                # Moment release entries (these are now at index 4 and 5)
+                self.element_table_entries[i][4].insert(0, data[4])
+                self.element_table_entries[i][5].insert(0, data[5])
+
         else:
             self.add_element_table_row()
 
@@ -519,33 +180,45 @@ class FrameAnalyzer:
         row_entries = []
         row_num = len(self.element_table_entries) + 1
 
+        # Element No.
         element_label = tk.Label(self.element_table_frame, text=f"E{row_num}", relief=tk.RIDGE, width=15)
         element_label.grid(row=row_num, column=0)
         row_entries.append(element_label)
 
-        node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
-        if not node_names:
-            node_names = [""]
-
+        # Start Node Dropdown
+        node_names = [f"N{i+1}" for i in range(len(self.nodes_data))] or [""]
         start_node_var = tk.StringVar()
         start_node_menu = tk.OptionMenu(self.element_table_frame, start_node_var, *node_names)
         start_node_menu.grid(row=row_num, column=1)
         row_entries.append(start_node_var)
 
+        # End Node Dropdown
         end_node_var = tk.StringVar()
         end_node_menu = tk.OptionMenu(self.element_table_frame, end_node_var, *node_names)
         end_node_menu.grid(row=row_num, column=2)
         row_entries.append(end_node_var)
 
+        # Section Dropdown
+        section_names = [s[0] for s in self.sections_data] or [""]
+        section_var = tk.StringVar()
+        if section_names:
+            section_var.set(section_names[0])
+        section_menu = tk.OptionMenu(self.element_table_frame, section_var, *section_names)
+        section_menu.grid(row=row_num, column=3)
+        row_entries.append(section_var)
+
+        # Moment Release Start
         moment_release_start_entry = tk.Entry(self.element_table_frame, width=15)
-        moment_release_start_entry.grid(row=row_num, column=3)
+        moment_release_start_entry.grid(row=row_num, column=4)
         row_entries.append(moment_release_start_entry)
 
+        # Moment Release End
         moment_release_end_entry = tk.Entry(self.element_table_frame, width=15)
-        moment_release_end_entry.grid(row=row_num, column=4)
+        moment_release_end_entry.grid(row=row_num, column=5)
         row_entries.append(moment_release_end_entry)
 
         self.element_table_entries.append(row_entries)
+
 
     def update_element_tab_dropdowns(self):
         node_names = [f"N{i+1}" for i in range(len(self.nodes_data))]
@@ -579,19 +252,27 @@ class FrameAnalyzer:
             for row in self.element_table_entries:
                 start_node = int(row[1].get().replace("N", "")) - 1
                 end_node = int(row[2].get().replace("N", "")) - 1
-                moment_release_start = row[3].get()
-                moment_release_end = row[4].get()
+                section_name = row[3].get()
+                section_index = self.get_section_index_from_name(section_name)
+                moment_release_start = row[4].get()
+                moment_release_end = row[5].get()
 
                 x1, y1, _ = self.nodes_data[start_node]
                 x2, y2, _ = self.nodes_data[end_node]
 
-                self.elements_data.append([x1, y1, x2, y2, moment_release_start, moment_release_end])
+                self.elements_data.append([x1, y1, x2, y2, moment_release_start, moment_release_end, section_index])
 
             if close_dialog:
                 self.geometry_dialog.destroy()
         except ValueError:
-            messagebox.showerror("Input Error", "Please select start and end nodes for all elements.")
+            messagebox.showerror("Input Error", "Please select start, end nodes and section for all elements.")
             return
+
+    def get_section_index_from_name(self, name):
+        for i, section_data in enumerate(self.sections_data):
+            if section_data[0] == name:  # Compare section name
+                return i
+        return None
 
     def display_elements_from_table(self):
         self.save_elements_from_table(close_dialog=False)
@@ -651,13 +332,12 @@ class FrameAnalyzer:
     def save_nodes_from_table(self, close_dialog=True):
         try:
             self.nodes_data = []
-            unit = self.current_units["length"]  # "m" or "mm"
+            unit = self.current_units["length"]
             for row in self.node_table_entries:
                 x_input = float(row[1].get())
                 y_input = float(row[2].get())
                 support = row[3].get()
 
-                # Always store in meters
                 if unit == "mm":
                     x = x_input / 1000
                     y = y_input / 1000
@@ -665,8 +345,9 @@ class FrameAnalyzer:
                     x = x_input
                     y = y_input
 
-                self.nodes_data.append([x, y, support])  # Internal always in meters
+                self.nodes_data.append([x, y, support])
 
+            # Save section material mapping
             self.save_sections_from_table()
 
             if close_dialog:
@@ -674,11 +355,14 @@ class FrameAnalyzer:
         except ValueError:
             messagebox.showerror("Input Error", "Coordinate fields cannot be empty.")
 
+
     def save_sections_from_table(self):
         for i, row in enumerate(self.section_table_entries):
-            section_name = row[1].get()
-            material_name = row[2].get()
+            section_name = row[1].cget("text")  # Label text for section name
+            material_name = row[2].get()  # Selected material from dropdown
             material_index = self.get_material_index_from_name(material_name)
+
+            # Update section data
             self.sections_data[i][0] = section_name
             self.sections_data[i][3] = material_index
 
@@ -812,6 +496,178 @@ class FrameAnalyzer:
         self.current_units = {"force": force, "length": length, "temperature": temp}
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
+
+    def open_load_comb_dialog(self):
+        self.load_comb_dialog = tk.Toplevel(self.master)
+        self.load_comb_dialog.title("Load Combinations")
+
+        notebook = ttk.Notebook(self.load_comb_dialog)
+        notebook.pack(expand=True, fill="both")
+
+        load_pattern_tab = tk.Frame(notebook)
+        load_combinations_tab = tk.Frame(notebook)
+
+        notebook.add(load_pattern_tab, text="Load Pattern")
+        notebook.add(load_combinations_tab, text="Load Combinations")
+
+        self.setup_load_pattern_tab(load_pattern_tab)
+        self.setup_load_combinations_tab(load_combinations_tab)
+
+    def setup_load_combinations_tab(self, tab):
+        self.load_combination_table_frame = tk.Frame(tab)
+        self.load_combination_table_frame.pack()
+
+        headers = ["Combination", "Dead", "Live", "Snow", "Wind"]
+        for i, header in enumerate(headers):
+            tk.Label(self.load_combination_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.load_combination_table_entries = []
+        self.selected_load_combination_index = None
+        if self.load_combinations_data:
+            for data in self.load_combinations_data:
+                self.add_load_combination_table_row()
+                for i, value in enumerate(data):
+                    self.load_combination_table_entries[-1][i].insert(0, value)
+        else:
+            self.add_load_combination_table_row()
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.add_load_combination_table_row).pack(side=tk.LEFT)
+        self.remove_load_combination_button = tk.Button(button_frame, text="Remove", command=self.remove_load_combination, state=tk.DISABLED)
+        self.remove_load_combination_button.pack(side=tk.LEFT)
+        self.modify_load_combination_button = tk.Button(button_frame, text="Modify", command=self.modify_load_combination, state=tk.DISABLED)
+        self.modify_load_combination_button.pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=self.save_load_combinations_and_close).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+
+    def add_load_combination_table_row(self):
+        row_entries = []
+        row_num = len(self.load_combination_table_entries) + 1
+
+        for i in range(5):
+            entry = tk.Entry(self.load_combination_table_frame, width=15)
+            entry.grid(row=row_num, column=i)
+            row_entries.append(entry)
+
+        def on_click(event, index=row_num-1):
+            self.selected_load_combination_index = index
+            for row in self.load_combination_table_entries:
+                for entry in row:
+                    entry.config(bg="white")
+            for entry in self.load_combination_table_entries[index]:
+                entry.config(bg="lightblue")
+            self.remove_load_combination_button.config(state=tk.NORMAL)
+            self.modify_load_combination_button.config(state=tk.NORMAL)
+
+        for entry in row_entries:
+            entry.bind("<Button-1>", on_click)
+
+        self.load_combination_table_entries.append(row_entries)
+
+    def remove_load_combination(self):
+        if self.selected_load_combination_index is not None:
+            self.load_combinations_data.pop(self.selected_load_combination_index)
+            for widget in self.load_combination_table_entries[self.selected_load_combination_index]:
+                widget.destroy()
+            self.load_combination_table_entries.pop(self.selected_load_combination_index)
+            self.selected_load_combination_index = None
+
+    def modify_load_combination(self):
+        # For now, just re-enable the entry widgets for editing
+        if self.selected_load_combination_index is not None:
+            row = self.load_combination_table_entries[self.selected_load_combination_index]
+            for entry in row:
+                entry.config(state=tk.NORMAL)
+
+    def save_load_combinations_and_close(self):
+        self.save_load_combinations()
+        self.load_comb_dialog.destroy()
+
+    def save_load_combinations(self):
+        self.load_combinations_data = []
+        for row in self.load_combination_table_entries:
+            name = row[0].get()
+            dead = float(row[1].get())
+            live = float(row[2].get())
+            snow = float(row[3].get())
+            wind = float(row[4].get())
+            self.load_combinations_data.append([name, dead, live, snow, wind])
+
+    def setup_load_pattern_tab(self, tab):
+        self.load_pattern_table_frame = tk.Frame(tab)
+        self.load_pattern_table_frame.pack()
+
+        headers = ["Load Name", "Load Type"]
+        for i, header in enumerate(headers):
+            tk.Label(self.load_pattern_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.load_pattern_table_entries = []
+        self.selected_load_pattern_index = None
+        self.add_load_pattern_table_row()
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.add_load_pattern_table_row).pack(side=tk.LEFT)
+        self.remove_load_pattern_button = tk.Button(button_frame, text="Remove", command=self.remove_load_pattern, state=tk.DISABLED)
+        self.remove_load_pattern_button.pack(side=tk.LEFT)
+        self.modify_load_pattern_button = tk.Button(button_frame, text="Modify", command=self.modify_load_pattern, state=tk.DISABLED)
+        self.modify_load_pattern_button.pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=self.save_load_patterns_and_close).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+
+    def save_load_patterns_and_close(self):
+        self.save_load_patterns()
+        self.load_comb_dialog.destroy()
+
+    def add_load_pattern_table_row(self):
+        row_entries = []
+        row_num = len(self.load_pattern_table_entries) + 1
+
+        name_entry = tk.Entry(self.load_pattern_table_frame, width=15)
+        name_entry.grid(row=row_num, column=0)
+        row_entries.append(name_entry)
+
+        load_types = ["Dead", "Live", "Snow", "Wind"]
+        load_type_var = tk.StringVar()
+        load_type_menu = tk.OptionMenu(self.load_pattern_table_frame, load_type_var, *load_types)
+        load_type_menu.grid(row=row_num, column=1)
+        row_entries.append(load_type_var)
+
+        def on_click(event, index=row_num-1):
+            self.selected_load_pattern_index = index
+            for row in self.load_pattern_table_entries:
+                row[0].config(bg="white")
+            self.load_pattern_table_entries[index][0].config(bg="lightblue")
+            self.remove_load_pattern_button.config(state=tk.NORMAL)
+            self.modify_load_pattern_button.config(state=tk.NORMAL)
+
+        name_entry.bind("<Button-1>", on_click)
+
+        self.load_pattern_table_entries.append(row_entries)
+
+    def remove_load_pattern(self):
+        if self.selected_load_pattern_index is not None:
+            self.load_patterns_data.pop(self.selected_load_pattern_index)
+            for widget in self.load_pattern_table_entries[self.selected_load_pattern_index]:
+                widget.destroy()
+            self.load_pattern_table_entries.pop(self.selected_load_pattern_index)
+            self.selected_load_pattern_index = None
+
+    def modify_load_pattern(self):
+        # For now, just re-enable the entry widgets for editing
+        if self.selected_load_pattern_index is not None:
+            row = self.load_pattern_table_entries[self.selected_load_pattern_index]
+            row[0].config(state=tk.NORMAL)
+
+    def save_load_patterns(self):
+        self.load_patterns_data = []
+        for row in self.load_pattern_table_entries:
+            name = row[0].get()
+            load_type = row[1].get()
+            self.load_patterns_data.append([name, load_type])
 
 if __name__ == "__main__":
     root = tk.Tk()
