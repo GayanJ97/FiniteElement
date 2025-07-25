@@ -36,6 +36,9 @@ class FrameAnalyzer:
         self.load_comb_button = tk.Button(self.toolbar, text="Load Comb", command=self.open_load_comb_dialog)
         self.load_comb_button.pack(side=tk.TOP)
 
+        self.loads_button = tk.Button(self.toolbar, text="Loads", command=self.open_loads_dialog)
+        self.loads_button.pack(side=tk.TOP)
+
         # Unit selection dropdown
         self.units_var = tk.StringVar()
         self.units_var.set("kN, m, C")
@@ -51,6 +54,9 @@ class FrameAnalyzer:
         self.sections_data = [] # [name, type, properties, material_index]
         self.load_patterns_data = [] # [name, type]
         self.load_combinations_data = [] # [name, dead, live, snow, wind]
+        self.udl_data = [] # [element_index, magnitude, direction, start_pos, end_pos]
+        self.vdl_data = [] # [element_index, start_mag, end_mag, direction, start_pos, end_pos]
+        self.point_load_data = [] # [element_index, magnitude, direction, distance]
         self.properties = {}
         self.current_units = {"force": "kN", "length": "m", "temperature": "C"}
 
@@ -261,36 +267,11 @@ class FrameAnalyzer:
             entry.grid(row=i+1, column=1)
             self.section_properties_entries[label_text] = entry
 
-        # Material Dropdown
-        tk.Label(self.section_properties_dialog, text="Material:").grid(row=len(labels)+1, column=0, sticky="w")
-        material_names = [m[0] for m in self.materials_data] if self.materials_data else [""]
-        self.selected_material_var = tk.StringVar()
-        if material_names:
-            self.selected_material_var.set(material_names[0])
-        material_dropdown = tk.OptionMenu(self.section_properties_dialog, self.selected_material_var, *material_names)
-        material_dropdown.grid(row=len(labels)+1, column=1)
+        ok_button = tk.Button(self.section_properties_dialog, text="OK", command=lambda: self.save_section(section_type))
+        ok_button.grid(row=len(labels), column=0)
 
-        # Buttons at bottom
-        button_frame = tk.Frame(self.section_properties_dialog)
-        button_frame.grid(row=len(labels)+2, column=0, columnspan=2, pady=10)
-
-        self.ok_button = tk.Button(button_frame, text="OK",
-            command=lambda: self.save_section(section_type, modify=modify, section_index=section_index))
-        self.ok_button.pack(side=tk.LEFT, padx=5)
-
-        cancel_button = tk.Button(button_frame, text="Cancel", command=self.section_properties_dialog.destroy)
-        cancel_button.pack(side=tk.LEFT, padx=5)
-
-        # Pre-fill values when modifying
-        if modify and section_index is not None:
-            section_data = self.sections_data[section_index]
-            name_entry.insert(0, section_data[0])
-            for key, entry in self.section_properties_entries.items():
-                if key != "Section Name:":
-                    entry.insert(0, section_data[2][key])
-            if section_data[3] is not None and section_data[3] < len(self.materials_data):
-                self.selected_material_var.set(self.materials_data[section_data[3]][0])
-
+        cancel_button = tk.Button(self.section_properties_dialog, text="Cancel", command=self.section_properties_dialog.destroy)
+        cancel_button.grid(row=len(labels), column=1)
 
     def add_section_table_row(self, name, material_name=""):
         row_num = len(self.section_table_entries) + 1
@@ -339,7 +320,7 @@ class FrameAnalyzer:
         if modify:
             self.sections_data[section_index] = [section_name, section_type, properties, material_index]
             self.section_table_entries[section_index][1].config(text=section_name)
-            self.section_table_entries[section_index][2].config(text=material_name)
+            self.section_table_entries[section_index][2].set(material_name)
         else:
             self.sections_data.append([section_name, section_type, properties, material_index])
             self.add_section_table_row(section_name, material_name)
@@ -369,17 +350,7 @@ class FrameAnalyzer:
             labels = list(section_data[2].keys())
 
             # Open dialog and populate
-            self.open_section_properties_dialog(section_type, labels)
-            self.section_properties_dialog.title(f"Modify {section_type} Properties")
-
-            # Fill current values
-            self.section_properties_entries["Section Name:"].insert(0, section_data[0])
-            for label, entry in self.section_properties_entries.items():
-                if label != "Section Name:":
-                    entry.insert(0, section_data[2][label])
-
-            # Change OK button to modify mode
-            self.ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
+            self.open_section_properties_dialog(section_type, labels, modify=True, section_index=self.selected_section_index)
 
             # Change the OK button to call save_section with modify=True
             ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
@@ -820,6 +791,43 @@ class FrameAnalyzer:
         if "Y" in release:
             self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="green", width=2)
 
+    def draw_udl(self, x1, y1, x2, y2, magnitude, direction):
+        length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        num_arrows = int(length / 20)
+        if num_arrows == 0: num_arrows = 1
+
+        for i in range(num_arrows + 1):
+            t = i / num_arrows
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+
+            if direction == "Y":
+                self.canvas.create_line(x, y, x, y + magnitude, arrow=tk.LAST, fill="purple")
+            elif direction == "X":
+                self.canvas.create_line(x, y, x + magnitude, y, arrow=tk.LAST, fill="purple")
+
+    def draw_vdl(self, x1, y1, x2, y2, start_mag, end_mag, direction):
+        length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        num_arrows = int(length / 20)
+        if num_arrows == 0: num_arrows = 1
+
+        for i in range(num_arrows + 1):
+            t = i / num_arrows
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            mag = start_mag + t * (end_mag - start_mag)
+
+            if direction == "Y":
+                self.canvas.create_line(x, y, x, y + mag, arrow=tk.LAST, fill="orange")
+            elif direction == "X":
+                self.canvas.create_line(x, y, x + mag, y, arrow=tk.LAST, fill="orange")
+
+    def draw_point_load(self, x, y, magnitude, direction):
+        if direction == "Y":
+            self.canvas.create_line(x, y, x, y + magnitude, arrow=tk.LAST, fill="red", width=2)
+        elif direction == "X":
+            self.canvas.create_line(x, y, x + magnitude, y, arrow=tk.LAST, fill="red", width=2)
+
     def display_model(self):
         self.canvas.delete("all")
         self.draw_axes()
@@ -868,6 +876,27 @@ class FrameAnalyzer:
                 self.draw_moment_release(x1, y1, e[4])
             if e[5]:
                 self.draw_moment_release(x2, y2, e[5])
+
+        for udl in self.udl_data:
+            element_index, magnitude, direction, start_pos, end_pos = udl
+            element = self.elements_data[element_index]
+            x1, y1, x2, y2 = element[0], element[1], element[2], element[3]
+            self.draw_udl(x1, y1, x2, y2, magnitude, direction)
+
+        for vdl in self.vdl_data:
+            element_index, start_mag, end_mag, direction, start_pos, end_pos = vdl
+            element = self.elements_data[element_index]
+            x1, y1, x2, y2 = element[0], element[1], element[2], element[3]
+            self.draw_vdl(x1, y1, x2, y2, start_mag, end_mag, direction)
+
+        for pl in self.point_load_data:
+            element_index, magnitude, direction, distance = pl
+            element = self.elements_data[element_index]
+            x1, y1, x2, y2 = element[0], element[1], element[2], element[3]
+            t = distance / np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            self.draw_point_load(x, y, magnitude, direction)
 
     # ---------------- FEM Analysis ----------------
     def analyze(self):
@@ -922,9 +951,9 @@ class FrameAnalyzer:
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
 
-    def open_load_comb_dialog(self):
-        self.load_comb_dialog = tk.Toplevel(self.master)
-        self.load_comb_dialog.title("Load Combinations")
+    def open_loads_dialog(self):
+        self.loads_dialog = tk.Toplevel(self.master)
+        self.loads_dialog.title("Applied Loads")
 
         notebook = ttk.Notebook(self.load_comb_dialog)
         notebook.pack(expand=True, fill="both")
@@ -1047,7 +1076,7 @@ class FrameAnalyzer:
         self.modify_load_pattern_button = tk.Button(button_frame, text="Modify", command=self.modify_load_pattern, state=tk.DISABLED)
         self.modify_load_pattern_button.pack(side=tk.LEFT)
         tk.Button(button_frame, text="OK", command=self.save_load_patterns_and_close).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.loads_dialog.destroy).pack(side=tk.LEFT)
 
     def add_load_pattern_table_row(self):
         row_entries = []
@@ -1104,3 +1133,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = FrameAnalyzer(root)
     root.mainloop()
+
+[end of main.py]
