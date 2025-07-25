@@ -870,6 +870,89 @@ class FrameAnalyzer:
         notebook.add(load_combinations_tab, text="Load Combinations")
 
         self.setup_load_pattern_tab(load_pattern_tab)
+        self.setup_load_combinations_tab(load_combinations_tab)
+
+    def setup_load_combinations_tab(self, tab):
+        self.load_combination_table_frame = tk.Frame(tab)
+        self.load_combination_table_frame.pack()
+
+        headers = ["Combination", "Dead", "Live", "Snow", "Wind"]
+        for i, header in enumerate(headers):
+            tk.Label(self.load_combination_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+
+        self.load_combination_table_entries = []
+        self.selected_load_combination_index = None
+        if self.load_combinations_data:
+            for data in self.load_combinations_data:
+                self.add_load_combination_table_row()
+                for i, value in enumerate(data):
+                    self.load_combination_table_entries[-1][i].insert(0, value)
+        else:
+            self.add_load_combination_table_row()
+
+        button_frame = tk.Frame(tab)
+        button_frame.pack()
+
+        tk.Button(button_frame, text="Add", command=self.add_load_combination_table_row).pack(side=tk.LEFT)
+        self.remove_load_combination_button = tk.Button(button_frame, text="Remove", command=self.remove_load_combination, state=tk.DISABLED)
+        self.remove_load_combination_button.pack(side=tk.LEFT)
+        self.modify_load_combination_button = tk.Button(button_frame, text="Modify", command=self.modify_load_combination, state=tk.DISABLED)
+        self.modify_load_combination_button.pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=self.save_load_combinations_and_close).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+
+    def add_load_combination_table_row(self):
+        row_entries = []
+        row_num = len(self.load_combination_table_entries) + 1
+
+        for i in range(5):
+            entry = tk.Entry(self.load_combination_table_frame, width=15)
+            entry.grid(row=row_num, column=i)
+            row_entries.append(entry)
+
+        def on_click(event, index=row_num-1):
+            self.selected_load_combination_index = index
+            for row in self.load_combination_table_entries:
+                for entry in row:
+                    entry.config(bg="white")
+            for entry in self.load_combination_table_entries[index]:
+                entry.config(bg="lightblue")
+            self.remove_load_combination_button.config(state=tk.NORMAL)
+            self.modify_load_combination_button.config(state=tk.NORMAL)
+
+        for entry in row_entries:
+            entry.bind("<Button-1>", on_click)
+
+        self.load_combination_table_entries.append(row_entries)
+
+    def remove_load_combination(self):
+        if self.selected_load_combination_index is not None:
+            self.load_combinations_data.pop(self.selected_load_combination_index)
+            for widget in self.load_combination_table_entries[self.selected_load_combination_index]:
+                widget.destroy()
+            self.load_combination_table_entries.pop(self.selected_load_combination_index)
+            self.selected_load_combination_index = None
+
+    def modify_load_combination(self):
+        # For now, just re-enable the entry widgets for editing
+        if self.selected_load_combination_index is not None:
+            row = self.load_combination_table_entries[self.selected_load_combination_index]
+            for entry in row:
+                entry.config(state=tk.NORMAL)
+
+    def save_load_combinations_and_close(self):
+        self.save_load_combinations()
+        self.load_comb_dialog.destroy()
+
+    def save_load_combinations(self):
+        self.load_combinations_data = []
+        for row in self.load_combination_table_entries:
+            name = row[0].get()
+            dead = float(row[1].get())
+            live = float(row[2].get())
+            snow = float(row[3].get())
+            wind = float(row[4].get())
+            self.load_combinations_data.append([name, dead, live, snow, wind])
 
     def setup_load_pattern_tab(self, tab):
         self.load_pattern_table_frame = tk.Frame(tab)
