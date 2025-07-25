@@ -98,6 +98,8 @@ class FrameAnalyzer:
             "elements": self.elements_data,
             "materials": self.materials_data,
             "sections": self.sections_data,
+            "load_patterns": self.load_patterns_data,
+            "load_combinations": self.load_combinations_data,
         }
 
         filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
@@ -117,6 +119,8 @@ class FrameAnalyzer:
             self.elements_data = project_data["elements"]
             self.materials_data = project_data["materials"]
             self.sections_data = project_data["sections"]
+            self.load_patterns_data = project_data["load_patterns"]
+            self.load_combinations_data = project_data["load_combinations"]
 
             self.display_model()
             self.change_units(self.units_var.get())
@@ -783,7 +787,7 @@ class FrameAnalyzer:
             self.canvas.create_polygon(x - base, y + size, x + base, y + size, x, y, fill="blue", outline="black")
 
         elif support == "y":  # Vertical Roller
-            self.canvas.create_polygon(x - base, y, x + base, y, x, y + size, fill="white", outline="black")
+            self.canvas.create_polygon(x - base, y + size, x + base, y + size, x, y, fill="white", outline="black")
             self.canvas.create_oval(x - 10, y + size, x - 6, y + size + 4, fill="black")
             self.canvas.create_oval(x + 6, y + size, x + 10, y + size + 4, fill="black")
 
