@@ -177,9 +177,12 @@ class FrameAnalyzer:
         self.selected_section_index = None
         if self.sections_data:
             for section in self.sections_data:
-                self.add_section_table_row(section[0])
+                material_name = self.materials_data[section[3]][0] if section[3] is not None and section[3] < len(self.materials_data) else ""
+                self.add_section_table_row(section[0], material_name)
                 if section[3] is not None:
-                    self.section_table_entries[-1][2].set(self.materials_data[section[3]][0])
+                    material_name = self.materials_data[section[3]][0] if section[3] is not None and section[3] < len(self.materials_data) else ""
+                    self.section_table_entries[-1][2].config(text=material_name)
+
 
         button_frame = tk.Frame(tab)
         button_frame.pack()
@@ -235,29 +238,55 @@ class FrameAnalyzer:
     def open_circular_section_dialog(self):
         self.open_section_properties_dialog("Circular", ["Diameter (d)"])
 
-    def open_section_properties_dialog(self, section_type, labels):
+    def open_section_properties_dialog(self, section_type, labels, modify=False, section_index=None):
         self.section_properties_dialog = tk.Toplevel(self.geometry_dialog)
         self.section_properties_dialog.title(f"{section_type} Properties")
 
         self.section_properties_entries = {}
 
-        tk.Label(self.section_properties_dialog, text="Section Name:").grid(row=0, column=0)
+        # Section Name
+        tk.Label(self.section_properties_dialog, text="Section Name:").grid(row=0, column=0, sticky="w")
         name_entry = tk.Entry(self.section_properties_dialog)
         name_entry.grid(row=0, column=1)
         self.section_properties_entries["Section Name:"] = name_entry
 
+        # Add properties
         for i, label_text in enumerate(labels):
-            label = tk.Label(self.section_properties_dialog, text=label_text)
-            label.grid(row=i+1, column=0)
+            tk.Label(self.section_properties_dialog, text=label_text).grid(row=i+1, column=0, sticky="w")
             entry = tk.Entry(self.section_properties_dialog)
             entry.grid(row=i+1, column=1)
             self.section_properties_entries[label_text] = entry
 
-        ok_button = tk.Button(self.section_properties_dialog, text="OK", command=lambda: self.save_section(section_type))
-        ok_button.grid(row=len(labels), column=0)
+        # Material Dropdown
+        tk.Label(self.section_properties_dialog, text="Material:").grid(row=len(labels)+1, column=0, sticky="w")
+        material_names = [m[0] for m in self.materials_data] if self.materials_data else [""]
+        self.selected_material_var = tk.StringVar()
+        if material_names:
+            self.selected_material_var.set(material_names[0])
+        material_dropdown = tk.OptionMenu(self.section_properties_dialog, self.selected_material_var, *material_names)
+        material_dropdown.grid(row=len(labels)+1, column=1)
 
-        cancel_button = tk.Button(self.section_properties_dialog, text="Cancel", command=self.section_properties_dialog.destroy)
-        cancel_button.grid(row=len(labels), column=1)
+        # Buttons at bottom
+        button_frame = tk.Frame(self.section_properties_dialog)
+        button_frame.grid(row=len(labels)+2, column=0, columnspan=2, pady=10)
+
+        self.ok_button = tk.Button(button_frame, text="OK",
+            command=lambda: self.save_section(section_type, modify=modify, section_index=section_index))
+        self.ok_button.pack(side=tk.LEFT, padx=5)
+
+        cancel_button = tk.Button(button_frame, text="Cancel", command=self.section_properties_dialog.destroy)
+        cancel_button.pack(side=tk.LEFT, padx=5)
+
+        # Pre-fill values when modifying
+        if modify and section_index is not None:
+            section_data = self.sections_data[section_index]
+            name_entry.insert(0, section_data[0])
+            for key, entry in self.section_properties_entries.items():
+                if key != "Section Name:":
+                    entry.insert(0, section_data[2][key])
+            if section_data[3] is not None and section_data[3] < len(self.materials_data):
+                self.selected_material_var.set(self.materials_data[section_data[3]][0])
+
 
     def add_section_table_row(self, name, material_name=""):
         row_num = len(self.section_table_entries) + 1
@@ -268,12 +297,8 @@ class FrameAnalyzer:
         name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
         name_label.grid(row=row_num, column=1)
 
-        material_names = [m[0] for m in self.materials_data]
-        if not material_names:
-            material_names = [""]
-        material_var = tk.StringVar()
-        material_menu = tk.OptionMenu(self.section_table_frame, material_var, *material_names)
-        material_menu.grid(row=row_num, column=2)
+        material_label = tk.Label(self.section_table_frame, text=material_name, relief=tk.RIDGE, width=15)
+        material_label.grid(row=row_num, column=2)
 
         def on_click(event, index=row_num-1):
             self.selected_section_index = index
@@ -288,7 +313,8 @@ class FrameAnalyzer:
         no_label.bind("<Button-1>", on_click)
         name_label.bind("<Button-1>", on_click)
 
-        self.section_table_entries.append((no_label, name_label, material_var))
+        self.section_table_entries.append((no_label, name_label, material_label))
+
 
     def save_section(self, section_type, modify=False, section_index=None):
         properties = {}
@@ -311,6 +337,7 @@ class FrameAnalyzer:
         self.section_properties_dialog.destroy()
         if hasattr(self, 'section_type_dialog'):
             self.section_type_dialog.destroy()
+
 
     def remove_section(self):
         if self.selected_section_index is not None:
@@ -342,6 +369,9 @@ class FrameAnalyzer:
                     entry.insert(0, section_data[2][label])
 
             # Change OK button to modify mode
+            self.ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
+
+            # Change the OK button to call save_section with modify=True
             ok_button = self.section_properties_dialog.grid_slaves(row=len(self.section_properties_entries), column=0)[0]
             ok_button.config(command=lambda: self.save_section(section_type, modify=True, section_index=self.selected_section_index))
 
@@ -639,7 +669,9 @@ class FrameAnalyzer:
 
     def setup_node_tab(self, tab):
         self.node_table_frame = tk.Frame(tab)
-        self.node_table_frame.pack()
+        self.node_table_frame.grid(row=1, column=0, sticky="nsew")
+        note = tk.Label(tab, text="Support input: x = X-restrain, y = Y-restrain, Z = moment fix.\nExamples: 'xy' = pin, 'xyZ' = fixed, 'y' = vertical roller", fg="gray", font=("Arial", 8))
+        note.grid(row=0, column=0, sticky="w")
 
         headers = ["Node", "x", "y", "Support"]
         for i, header in enumerate(headers):
@@ -660,7 +692,7 @@ class FrameAnalyzer:
             self.add_node_table_row()
 
         button_frame = tk.Frame(tab)
-        button_frame.pack()
+        button_frame.grid(row=2, column=0, sticky="ew")
 
         tk.Button(button_frame, text="Add", command=self.add_node_table_row).pack(side=tk.LEFT)
         tk.Button(button_frame, text="Remove", command=self.remove_node_table_row).pack(side=tk.LEFT)
@@ -738,14 +770,38 @@ class FrameAnalyzer:
 
     # ----------------- DRAWING -----------------
     def draw_support(self, x, y, support):
-        size = 10
-        if "x" in support:
-            self.canvas.create_line(x - size, y, x + size, y, fill="red", width=2)
-        if "y" in support:
-            self.canvas.create_line(x, y - size, x, y + size, fill="red", width=2)
-        if "X" in support:
-            self.canvas.create_oval(x - size, y - size, x + size, y + size, outline="blue", width=2)
-            self.canvas.create_line(x, y - size, x, y - size - 5, fill="blue", width=2)
+        size = 20
+        base = 8
+
+        if support == "xy":  # Pinned
+            self.canvas.create_polygon(x - base, y + size, x + base, y + size, x, y, fill="blue", outline="black")
+
+        elif support == "y":  # Vertical Roller
+            self.canvas.create_polygon(x - base, y, x + base, y, x, y + size, fill="white", outline="black")
+            self.canvas.create_oval(x - 10, y + size, x - 6, y + size + 4, fill="black")
+            self.canvas.create_oval(x + 6, y + size, x + 10, y + size + 4, fill="black")
+
+        elif support == "x":  # Horizontal Roller
+            self.canvas.create_polygon(x, y - base, x, y + base, x - size, y, fill="white", outline="black")
+            self.canvas.create_oval(x - size - 8, y - 5, x - size - 4, y - 1, fill="black")
+            self.canvas.create_oval(x - size - 8, y + 1, x - size - 4, y + 5, fill="black")
+
+        elif support == "xyZ":  # Fixed
+            self.canvas.create_line(x - base, y + size, x + base, y + size, width=4, fill="black")
+            self.canvas.create_line(x, y, x, y + size, width=2, fill="blue")
+
+        elif support == "Z":  # Only moment fixed
+            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline="green", width=2)
+
+        else:
+            # Fallback logic for any combinations
+            if "x" in support:
+                self.canvas.create_line(x - base, y, x + base, y, fill="red", width=2)
+            if "y" in support:
+                self.canvas.create_line(x, y - base, x, y + base, fill="red", width=2)
+            if "Z" in support:
+                self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline="green", width=2)
+
 
     def draw_moment_release(self, x, y, release):
         size = 5
