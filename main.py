@@ -297,8 +297,14 @@ class FrameAnalyzer:
         name_label = tk.Label(self.section_table_frame, text=name, relief=tk.RIDGE, width=15)
         name_label.grid(row=row_num, column=1)
 
-        material_label = tk.Label(self.section_table_frame, text=material_name, relief=tk.RIDGE, width=15)
-        material_label.grid(row=row_num, column=2)
+        material_names = [m[0] for m in self.materials_data]
+        if not material_names:
+            material_names = [""]
+        material_var = tk.StringVar()
+        if material_name:
+            material_var.set(material_name)
+        material_menu = tk.OptionMenu(self.section_table_frame, material_var, *material_names)
+        material_menu.grid(row=row_num, column=2)
 
         def on_click(event, index=row_num-1):
             self.selected_section_index = index
@@ -313,7 +319,7 @@ class FrameAnalyzer:
         no_label.bind("<Button-1>", on_click)
         name_label.bind("<Button-1>", on_click)
 
-        self.section_table_entries.append((no_label, name_label, material_label))
+        self.section_table_entries.append((no_label, name_label, material_var))
 
 
     def save_section(self, section_type, modify=False, section_index=None):
