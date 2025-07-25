@@ -951,9 +951,9 @@ class FrameAnalyzer:
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
 
-    def open_load_comb_dialog(self):
-        self.load_comb_dialog = tk.Toplevel(self.master)
-        self.load_comb_dialog.title("Load Combinations")
+    def open_loads_dialog(self):
+        self.loads_dialog = tk.Toplevel(self.master)
+        self.loads_dialog.title("Applied Loads")
 
         notebook = ttk.Notebook(self.load_comb_dialog)
         notebook.pack(expand=True, fill="both")
@@ -1076,7 +1076,7 @@ class FrameAnalyzer:
         self.modify_load_pattern_button = tk.Button(button_frame, text="Modify", command=self.modify_load_pattern, state=tk.DISABLED)
         self.modify_load_pattern_button.pack(side=tk.LEFT)
         tk.Button(button_frame, text="OK", command=self.save_load_patterns_and_close).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=self.loads_dialog.destroy).pack(side=tk.LEFT)
 
     def add_load_pattern_table_row(self):
         row_entries = []
