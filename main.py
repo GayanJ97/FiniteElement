@@ -1034,6 +1034,52 @@ class FrameAnalyzer:
             self.load_combinations_data.append([name, dead, live, snow, wind])
         self.load_comb_dialog.destroy()
 
+    def setup_load_pattern_tab(self, tab):
+        headers = ["Load Name", "Load Type"]
+        self.load_pattern_table_frame, self.load_pattern_table_entries = self._create_tab_frame(
+            tab,
+            "Load Pattern",
+            headers,
+            self.load_patterns_data,
+            self.add_load_pattern_table_row,
+            self.remove_load_pattern_table_row,
+            self.save_load_patterns_from_table
+        )
+
+    def add_load_pattern_table_row(self, table_frame, entries, data):
+        row_num = len(entries) + 1
+        row_entries = []
+        name_entry = tk.Entry(table_frame, width=15)
+        name_entry.grid(row=row_num, column=0)
+        row_entries.append(name_entry)
+
+        load_types = ["Dead", "Live", "Snow", "Wind"]
+        load_type_var = tk.StringVar()
+        load_type_menu = tk.OptionMenu(table_frame, load_type_var, *load_types)
+        load_type_menu.grid(row=row_num, column=1)
+        row_entries.append(load_type_var)
+
+        if data:
+            name_entry.insert(0, data[0])
+            load_type_var.set(data[1])
+        entries.append(row_entries)
+
+    def remove_load_pattern_table_row(self, entries):
+        if len(entries) > 1:
+            row_to_remove = entries.pop()
+            for widget in row_to_remove:
+                if isinstance(widget, tk.StringVar):
+                    continue
+                widget.destroy()
+
+    def save_load_patterns_from_table(self, entries):
+        self.load_patterns_data = []
+        for row in entries:
+            name = row[0].get()
+            load_type = row[1].get()
+            self.load_patterns_data.append([name, load_type])
+        self.load_comb_dialog.destroy()
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = FrameAnalyzer(root)
