@@ -181,7 +181,7 @@ class FrameAnalyzer:
                 self.add_section_table_row(section[0], material_name)
                 if section[3] is not None:
                     material_name = self.materials_data[section[3]][0] if section[3] is not None and section[3] < len(self.materials_data) else ""
-                    self.section_table_entries[-1][2].config(text=material_name)
+                    self.section_table_entries[-1][2].set(material_name)
 
 
         button_frame = tk.Frame(tab)
