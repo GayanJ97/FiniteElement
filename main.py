@@ -119,8 +119,8 @@ class FrameAnalyzer:
             self.elements_data = project_data["elements"]
             self.materials_data = project_data["materials"]
             self.sections_data = project_data["sections"]
-            self.load_patterns_data = project_data["load_patterns"]
-            self.load_combinations_data = project_data["load_combinations"]
+            self.load_patterns_data = project_data.get("load_patterns", [])
+            self.load_combinations_data = project_data.get("load_combinations", [])
 
             self.display_model()
             self.change_units(self.units_var.get())
