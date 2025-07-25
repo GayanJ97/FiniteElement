@@ -36,7 +36,7 @@ class FrameAnalyzer:
         self.load_comb_button = tk.Button(self.toolbar, text="Load Comb", command=self.open_load_comb_dialog)
         self.load_comb_button.pack(side=tk.TOP)
 
-        self.loads_button = tk.Button(self.toolbar, text="Loads", command=self.open_loads_dialog)
+        self.loads_button = tk.Button(self.toolbar, text="Loads", command=self.open_load_comb_dialog)
         self.loads_button.pack(side=tk.TOP)
 
         # Unit selection dropdown
@@ -951,11 +951,11 @@ class FrameAnalyzer:
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
 
-    def open_loads_dialog(self):
-        self.loads_dialog = tk.Toplevel(self.master)
-        self.loads_dialog.title("Applied Loads")
+    def open_load_comb_dialog(self):
+        self.load_comb_dialog = tk.Toplevel(self.master)
+        self.load_comb_dialog.title("Load Combinations")
 
-        notebook = ttk.Notebook(self.loads_dialog)
+        notebook = ttk.Notebook(self.load_comb_dialog)
         notebook.pack(expand=True, fill="both")
 
         load_pattern_tab = tk.Frame(notebook)
