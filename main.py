@@ -36,7 +36,7 @@ class FrameAnalyzer:
         self.load_comb_button = tk.Button(self.toolbar, text="Load Comb", command=self.open_load_comb_dialog)
         self.load_comb_button.pack(side=tk.TOP)
 
-        self.loads_button = tk.Button(self.toolbar, text="Loads", command=self.open_loads_dialog)
+        self.loads_button = tk.Button(self.toolbar, text="Loads", command=self.open_load_comb_dialog)
         self.loads_button.pack(side=tk.TOP)
 
         # Unit selection dropdown
@@ -951,9 +951,9 @@ class FrameAnalyzer:
         if hasattr(self, "geometry_dialog") and self.geometry_dialog.winfo_exists():
             self.update_node_dialog_display()
 
-    def open_loads_dialog(self):
-        self.loads_dialog = tk.Toplevel(self.master)
-        self.loads_dialog.title("Applied Loads")
+    def open_load_comb_dialog(self):
+        self.load_comb_dialog = tk.Toplevel(self.master)
+        self.load_comb_dialog.title("Load Combinations")
 
         notebook = ttk.Notebook(self.load_comb_dialog)
         notebook.pack(expand=True, fill="both")
@@ -967,171 +967,125 @@ class FrameAnalyzer:
         self.setup_load_pattern_tab(load_pattern_tab)
         self.setup_load_combinations_tab(load_combinations_tab)
 
-    def setup_load_combinations_tab(self, tab):
-        self.load_combination_table_frame = tk.Frame(tab)
-        self.load_combination_table_frame.pack()
 
-        headers = ["Combination", "Dead", "Live", "Snow", "Wind"]
+    def _create_tab_frame(self, parent, title, headers, data_list, add_row_func, remove_row_func, save_func):
+        frame = tk.Frame(parent)
+        table_frame = tk.Frame(frame)
+        table_frame.pack()
+
         for i, header in enumerate(headers):
-            tk.Label(self.load_combination_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+            tk.Label(table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
 
-        self.load_combination_table_entries = []
-        self.selected_load_combination_index = None
-        if self.load_combinations_data:
-            for data in self.load_combinations_data:
-                self.add_load_combination_table_row()
-                for i, value in enumerate(data):
-                    self.load_combination_table_entries[-1][i].insert(0, value)
+        entries = []
+        if data_list:
+            for item in data_list:
+                add_row_func(table_frame, entries, item)
         else:
-            self.add_load_combination_table_row()
+            add_row_func(table_frame, entries, None)
 
-        button_frame = tk.Frame(tab)
+        button_frame = tk.Frame(frame)
         button_frame.pack()
 
-        tk.Button(button_frame, text="Add", command=self.add_load_combination_table_row).pack(side=tk.LEFT)
-        self.remove_load_combination_button = tk.Button(button_frame, text="Remove", command=self.remove_load_combination, state=tk.DISABLED)
-        self.remove_load_combination_button.pack(side=tk.LEFT)
-        self.modify_load_combination_button = tk.Button(button_frame, text="Modify", command=self.modify_load_combination, state=tk.DISABLED)
-        self.modify_load_combination_button.pack(side=tk.LEFT)
-        tk.Button(button_frame, text="OK", command=self.save_load_combinations_and_close).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Cancel", command=self.load_comb_dialog.destroy).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Add", command=lambda: add_row_func(table_frame, entries, None)).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Remove", command=lambda: remove_row_func(entries)).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="OK", command=lambda: save_func(entries)).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="Cancel", command=parent.destroy).pack(side=tk.LEFT)
 
-    def add_load_combination_table_row(self):
+        return frame, entries
+
+    def setup_load_combinations_tab(self, tab):
+        headers = ["Combination", "Dead", "Live", "Snow", "Wind"]
+        self.load_combination_table_frame, self.load_combination_table_entries = self._create_tab_frame(
+            tab,
+            "Load Combinations",
+            headers,
+            self.load_combinations_data,
+            self.add_load_combination_table_row,
+            self.remove_load_combination_table_row,
+            self.save_load_combinations_from_table
+        )
+
+    def add_load_combination_table_row(self, table_frame, entries, data):
+        row_num = len(entries) + 1
         row_entries = []
-        row_num = len(self.load_combination_table_entries) + 1
-
         for i in range(5):
-            entry = tk.Entry(self.load_combination_table_frame, width=15)
+            entry = tk.Entry(table_frame, width=15)
             entry.grid(row=row_num, column=i)
             row_entries.append(entry)
+        if data:
+            for i, value in enumerate(data):
+                row_entries[i].insert(0, value)
+        entries.append(row_entries)
 
-        def on_click(event, index=row_num-1):
-            self.selected_load_combination_index = index
-            for row in self.load_combination_table_entries:
-                for entry in row:
-                    entry.config(bg="white")
-            for entry in self.load_combination_table_entries[index]:
-                entry.config(bg="lightblue")
-            self.remove_load_combination_button.config(state=tk.NORMAL)
-            self.modify_load_combination_button.config(state=tk.NORMAL)
-
-        for entry in row_entries:
-            entry.bind("<Button-1>", on_click)
-
-        self.load_combination_table_entries.append(row_entries)
-
-    def remove_load_combination(self):
-        if self.selected_load_combination_index is not None:
-            self.load_combinations_data.pop(self.selected_load_combination_index)
-            for widget in self.load_combination_table_entries[self.selected_load_combination_index]:
+    def remove_load_combination_table_row(self, entries):
+        if len(entries) > 1:
+            row_to_remove = entries.pop()
+            for widget in row_to_remove:
                 widget.destroy()
-            self.load_combination_table_entries.pop(self.selected_load_combination_index)
-            self.selected_load_combination_index = None
 
-    def modify_load_combination(self):
-        # For now, just re-enable the entry widgets for editing
-        if self.selected_load_combination_index is not None:
-            row = self.load_combination_table_entries[self.selected_load_combination_index]
-            for entry in row:
-                entry.config(state=tk.NORMAL)
-
-    def save_load_combinations_and_close(self):
-        self.save_load_combinations()
-        self.load_comb_dialog.destroy()
-
-    def save_load_combinations(self):
+    def save_load_combinations_from_table(self, entries):
         self.load_combinations_data = []
-        for row in self.load_combination_table_entries:
+        for row in entries:
             name = row[0].get()
             dead = float(row[1].get())
             live = float(row[2].get())
             snow = float(row[3].get())
             wind = float(row[4].get())
             self.load_combinations_data.append([name, dead, live, snow, wind])
+        self.load_comb_dialog.destroy()
 
     def setup_load_pattern_tab(self, tab):
-        self.load_pattern_table_frame = tk.Frame(tab)
-        self.load_pattern_table_frame.pack()
-
         headers = ["Load Name", "Load Type"]
-        for i, header in enumerate(headers):
-            tk.Label(self.load_pattern_table_frame, text=header, relief=tk.RIDGE, width=15).grid(row=0, column=i)
+        self.load_pattern_table_frame, self.load_pattern_table_entries = self._create_tab_frame(
+            tab,
+            "Load Pattern",
+            headers,
+            self.load_patterns_data,
+            self.add_load_pattern_table_row,
+            self.remove_load_pattern_table_row,
+            self.save_load_patterns_from_table
+        )
 
-        self.load_pattern_table_entries = []
-        self.selected_load_pattern_index = None
-        if self.load_patterns_data:
-            for data in self.load_patterns_data:
-                self.add_load_pattern_table_row()
-                self.load_pattern_table_entries[-1][0].insert(0, data[0])
-                self.load_pattern_table_entries[-1][1].set(data[1])
-        else:
-            self.add_load_pattern_table_row()
-
-        button_frame = tk.Frame(tab)
-        button_frame.pack()
-
-        tk.Button(button_frame, text="Add", command=self.add_load_pattern_table_row).pack(side=tk.LEFT)
-        self.remove_load_pattern_button = tk.Button(button_frame, text="Remove", command=self.remove_load_pattern, state=tk.DISABLED)
-        self.remove_load_pattern_button.pack(side=tk.LEFT)
-        self.modify_load_pattern_button = tk.Button(button_frame, text="Modify", command=self.modify_load_pattern, state=tk.DISABLED)
-        self.modify_load_pattern_button.pack(side=tk.LEFT)
-        tk.Button(button_frame, text="OK", command=self.save_load_patterns_and_close).pack(side=tk.LEFT)
-        tk.Button(button_frame, text="Cancel", command=self.loads_dialog.destroy).pack(side=tk.LEFT)
-
-    def add_load_pattern_table_row(self):
+    def add_load_pattern_table_row(self, table_frame, entries, data):
+        row_num = len(entries) + 1
         row_entries = []
-        row_num = len(self.load_pattern_table_entries) + 1
-
-        name_entry = tk.Entry(self.load_pattern_table_frame, width=15)
+        name_entry = tk.Entry(table_frame, width=15)
         name_entry.grid(row=row_num, column=0)
         row_entries.append(name_entry)
 
         load_types = ["Dead", "Live", "Snow", "Wind"]
         load_type_var = tk.StringVar()
-        load_type_menu = tk.OptionMenu(self.load_pattern_table_frame, load_type_var, *load_types)
+        load_type_menu = tk.OptionMenu(table_frame, load_type_var, *load_types)
         load_type_menu.grid(row=row_num, column=1)
         row_entries.append(load_type_var)
 
-        def on_click(event, index=row_num-1):
-            self.selected_load_pattern_index = index
-            for row in self.load_pattern_table_entries:
-                row[0].config(bg="white")
-            self.load_pattern_table_entries[index][0].config(bg="lightblue")
-            self.remove_load_pattern_button.config(state=tk.NORMAL)
-            self.modify_load_pattern_button.config(state=tk.NORMAL)
+        if data:
+            name_entry.insert(0, data[0])
+            load_type_var.set(data[1])
+        entries.append(row_entries)
 
-        name_entry.bind("<Button-1>", on_click)
-
-        self.load_pattern_table_entries.append(row_entries)
-
-    def remove_load_pattern(self):
-        if self.selected_load_pattern_index is not None:
-            self.load_patterns_data.pop(self.selected_load_pattern_index)
-            for widget in self.load_pattern_table_entries[self.selected_load_pattern_index]:
+    def remove_load_pattern_table_row(self, entries):
+        if len(entries) > 1:
+            row_to_remove = entries.pop()
+            for widget in row_to_remove:
+                if isinstance(widget, tk.StringVar):
+                    continue
                 widget.destroy()
-            self.load_pattern_table_entries.pop(self.selected_load_pattern_index)
-            self.selected_load_pattern_index = None
 
-    def modify_load_pattern(self):
-        # For now, just re-enable the entry widgets for editing
-        if self.selected_load_pattern_index is not None:
-            row = self.load_pattern_table_entries[self.selected_load_pattern_index]
-            row[0].config(state=tk.NORMAL)
-
-    def save_load_patterns_and_close(self):
-        self.save_load_patterns()
-        self.load_comb_dialog.destroy()
-
-    def save_load_patterns(self):
+    def save_load_patterns_from_table(self, entries):
         self.load_patterns_data = []
-        for row in self.load_pattern_table_entries:
+        for row in entries:
             name = row[0].get()
             load_type = row[1].get()
             self.load_patterns_data.append([name, load_type])
+        self.load_comb_dialog.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = FrameAnalyzer(root)
     root.mainloop()
+
+
+
 
 [end of main.py]
